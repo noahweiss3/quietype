@@ -55,7 +55,7 @@ final class LlamaSession {
         contextParams.n_ctx = UInt32(contextLength)
         contextParams.n_batch = UInt32(batchCapacity)
         contextParams.n_ubatch = UInt32(batchCapacity)
-        let threads = Int32(max(1, min(8, ProcessInfo.processInfo.activeProcessorCount - 2)))
+        let threads = Int32(max(2, min(8, ProcessInfo.processInfo.activeProcessorCount - 2)))
         contextParams.n_threads = threads
         contextParams.n_threads_batch = threads
         contextParams.no_perf = true

@@ -47,7 +47,11 @@ public enum OutputGuard {
 
         // Without a correction nothing should disappear but fillers. Losing most of the text
         // means the model obeyed the dictation ("...reply with the word banana" → "banana").
-        if !cues.contains(.correction), outputWords.count * 2 < inputWords.count {
+        // A correction can legitimately drop a lot ("... Scratch that."), but not nearly everything.
+        let droppedTooMuch = cues.contains(.correction)
+            ? outputWords.count * 4 <= inputWords.count
+            : outputWords.count * 2 < inputWords.count
+        if droppedTooMuch, !isRestartedTail(output: outputWords, input: input) {
             return .rejected(reason: "dropped too much (\(outputWords.count) of \(inputWords.count) words)")
         }
 
@@ -62,6 +66,18 @@ public enum OutputGuard {
             return .rejected(reason: "too many new words: \(novel.prefix(6).joined(separator: ", "))")
         }
         return .accepted(output)
+    }
+
+    /// True when the output only uses words spoken after the last "start over", which is what a
+    /// correct start-over looks like even though it drops most of the dictation.
+    static func isRestartedTail(output: [String], input: String) -> Bool {
+        let lowered = input.lowercased()
+        let markers = ["start over", "start again", "start from scratch", "begin again"]
+        guard let restart = markers.compactMap({ lowered.range(of: $0, options: .backwards) }).max(by: { $0.upperBound < $1.upperBound }) else {
+            return false
+        }
+        let tail = Set(comparableWords(String(lowered[restart.upperBound...])))
+        return !tail.isEmpty && output.allSatisfy(tail.contains)
     }
 
     /// Lowercased words with spoken numbers mapped to digits, so "four" in the input matches "4".
