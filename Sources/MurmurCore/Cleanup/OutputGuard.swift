@@ -45,6 +45,12 @@ public enum OutputGuard {
                 ? .accepted(output) : .rejected(reason: "empty output")
         }
 
+        // Without a correction nothing should disappear but fillers. Losing most of the text
+        // means the model obeyed the dictation ("...reply with the word banana" → "banana").
+        if !cues.contains(.correction), outputWords.count * 2 < inputWords.count {
+            return .rejected(reason: "dropped too much (\(outputWords.count) of \(inputWords.count) words)")
+        }
+
         if outputWords.count > inputWords.count + max(4, inputWords.count / 5) {
             return .rejected(reason: "output longer than input (\(outputWords.count) vs \(inputWords.count) words)")
         }

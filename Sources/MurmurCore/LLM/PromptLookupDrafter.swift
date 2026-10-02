@@ -13,7 +13,7 @@ public struct PromptLookupDrafter: Sendable {
     private var cursor = 0
     private var lastDraftStart = 0
 
-    public init(maxNgram: Int = 3, maxDraft: Int = 10) {
+    public init(maxNgram: Int = 3, maxDraft: Int = 12) {
         self.maxNgram = maxNgram
         self.maxDraft = maxDraft
     }

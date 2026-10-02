@@ -23,6 +23,10 @@ public struct DecodeStats: Equatable, Sendable {
 public enum SpeculativeDecoder {
     /// Greedy generation, optionally speeding it up with prompt-lookup drafts.
     ///
+    /// Draft length adapts as it goes: it grows while drafts are fully accepted (copying a long
+    /// stretch of the input) and shrinks after misses (the model is rewriting), so a list or a
+    /// correction doesn't pay for long drafts that keep getting thrown away.
+    ///
     /// - Parameters:
     ///   - next: the model's prediction after the prompt (already evaluated up to `position`).
     ///   - source: tokens to draft from, usually the dictation.
@@ -41,13 +45,15 @@ public enum SpeculativeDecoder {
         var output: [Model.Token] = []
         var next = first
         var position = start
+        let longest = max(1, drafter.maxDraft)
+        var draftLimit = min(4, longest)
 
         while output.count < maxTokens, !model.isEndOfGeneration(next) {
             output.append(next)
             if output.count == maxTokens { break }
 
             var draft = speculative ? drafter.draft(generated: output, source: source) : []
-            draft = Array(draft.prefix(maxTokens - output.count))
+            draft = Array(draft.prefix(min(draftLimit, maxTokens - output.count)))
 
             let predictions = try model.evaluate([next] + draft, at: position)
             stats.forwardPasses += 1
@@ -67,8 +73,15 @@ public enum SpeculativeDecoder {
             position += 1 + accepted
             if accepted < draft.count { try model.truncate(from: position) }
             next = prediction
-        }
 
+            if !draft.isEmpty {
+                if accepted == draft.count, draft.count == draftLimit {
+                    draftLimit = min(longest, draftLimit * 2)
+                } else if accepted == 0 {
+                    draftLimit = max(2, draftLimit / 2)
+                }
+            }
+        }
         return (output, stats)
     }
 }

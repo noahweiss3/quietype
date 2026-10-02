@@ -69,6 +69,9 @@ Task {
             let started = Date()
             cleaner = try await LlamaCleaner.load(model, path: URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
             log("cleanup model loaded in \(ms(Date().timeIntervalSince(started)))")
+            if let cleaner {
+                log(String(format: "batch-of-8 cost: %.2fx a single token, speculative decoding %@", cleaner.batchCostRatio, cleaner.speculationPaysOff ? "on" : "off (not worth it on this GPU)"))
+            }
         }
         let processor = DictationProcessor(cleaner: cleaner)
 

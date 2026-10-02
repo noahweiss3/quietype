@@ -26,6 +26,12 @@ public final class LlamaCleaner: TextCleaner, @unchecked Sendable {
     public var speculative = true
     public private(set) var lastStats = Stats()
 
+    /// Time to evaluate 8 tokens at once divided by the time for 1, measured at load.
+    /// Speculation only pays off when a small batch costs about the same as a single token,
+    /// which holds on Apple Silicon GPUs but not on, say, a virtual machine's GPU.
+    public private(set) var batchCostRatio = 1.0
+    public var speculationPaysOff: Bool { batchCostRatio < 2.0 }
+
     private init(model: CleanupModel, session: LlamaSession) throws {
         self.model = model
         self.session = session
@@ -40,6 +46,24 @@ public final class LlamaCleaner: TextCleaner, @unchecked Sendable {
         let prefix = try session.tokenize(String(rendered[..<marker.lowerBound]), addSpecial: true)
         try session.decode(prefix, at: 0, allLogits: false)
         prefixLength = prefix.count
+        batchCostRatio = Self.measureBatchCost(session, at: prefix.count, using: prefix)
+    }
+
+    private static func measureBatchCost(_ session: LlamaSession, at position: Int, using tokens: [llama_token]) -> Double {
+        func fastest(_ count: Int) -> Double {
+            var best = Double.infinity
+            for _ in 0..<3 {
+                let started = Date()
+                guard (try? session.decode(Array(tokens.suffix(count)), at: position, allLogits: true)) != nil else { return .infinity }
+                best = min(best, Date().timeIntervalSince(started))
+                try? session.removeTokens(from: position)
+            }
+            return best
+        }
+        _ = fastest(1) // warm-up
+        let single = fastest(1)
+        let batch = fastest(8)
+        return single > 0 && single.isFinite && batch.isFinite ? batch / single : .infinity
     }
 
     /// Loads the model and caches the prompt prefix. Takes a few seconds; call it off the main thread.
@@ -60,8 +84,10 @@ public final class LlamaCleaner: TextCleaner, @unchecked Sendable {
     }
 
     /// Runs one cleanup from a fully built user message. Exposed for tests and benchmarks.
+    /// `speculative` forces speculation on or off; by default it follows the setting and the
+    /// load-time measurement.
     public func complete(userContent: String, speculative: Bool? = nil) async throws -> (text: String, stats: Stats) {
-        let useSpeculative = speculative ?? self.speculative
+        let useSpeculative = speculative ?? (self.speculative && speculationPaysOff)
         return try await withCheckedThrowingContinuation { continuation in
             queue.async {
                 continuation.resume(with: Result { try self.run(userContent: userContent, speculative: useSpeculative) })
