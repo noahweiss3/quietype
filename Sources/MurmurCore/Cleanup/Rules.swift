@@ -9,6 +9,8 @@ public enum CleanupCue: String, Codable, Sendable, CaseIterable {
     case list
     /// "new line", "new paragraph", spoken punctuation.
     case formatting
+    /// Fillers the rules can't safely remove alone: "you know", "like", "sort of".
+    case filler
 }
 
 public struct RulesResult: Equatable, Sendable {
@@ -132,6 +134,7 @@ public enum Rules {
         (.correction, #"\b(scratch that|strike that|delete that|cancel that|undo that|never ?mind|no,? wait|wait,? no|i mean|actually|sorry|correction|or rather|make that|let me rephrase|rephrase that|start over|start again|scratch)\b"#),
         (.list, #"\b(first(ly)?\b.*\bsecond(ly)?|number one\b.*\bnumber two|bullet( point)?s?|numbered list|bulleted list|to-?do list|the following|next item|item one)\b"#),
         (.list, #"(^|\s)(one|1)[,.:)]\s.*\s(two|2)[,.:)]\s"#),
+        (.filler, #"\byou know\b|\bsort of\b|\b(was|were|is|it's|and|just|so|but|um|uh),? like,? \b|, like,"#),
         (.formatting, #"\b(new ?line|new paragraph|next line|open quote|close quote|end quote|open paren(thesis)?|close paren(thesis)?|all caps|semicolon|exclamation (point|mark)|question mark|em dash)\b"#),
     ].map { cue, pattern in (cue, try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])) }
 

@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Core tests (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version
+      - run: swift test
+
+  macos:
+    name: App build + on-device pipeline (macOS)
+    runs-on: macos-15
+    timeout-minutes: 75
+    env:
+      CLEANUP_MODEL_URL: https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf
+      CLEANUP_MODEL: ${{ github.workspace }}/.models/Qwen3-1.7B-Q4_K_M.gguf
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version && sw_vers && sysctl -n machdep.cpu.brand_string
+
+      - uses: actions/cache@v4
+        with:
+          path: .build
+          key: build-${{ runner.os }}-${{ hashFiles('Package.swift') }}-${{ hashFiles('Sources/**/*.swift') }}
+          restore-keys: build-${{ runner.os }}-${{ hashFiles('Package.swift') }}-
+
+      - name: Build everything
+        run: swift build -c release
+
+      - name: Bundle Murmur.app
+        run: scripts/build-app.sh
+
+      - name: Upload Murmur.app
+        run: cd build && ditto -c -k --keepParent Murmur.app Murmur.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Murmur-app
+          path: build/Murmur.zip
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .models
+            ~/Library/Application Support/FluidAudio
+          key: models-v1
+
+      - name: Download cleanup model
+        run: |
+          mkdir -p .models
+          [ -f "$CLEANUP_MODEL" ] || curl -sSL -o "$CLEANUP_MODEL" "$CLEANUP_MODEL_URL"
+          ls -la .models
+
+      - name: Make test audio
+        run: |
+          mkdir -p .audio
+          say -o .audio/filler.aiff "Um, so I think we should, uh, push the launch to next week."
+          say -o .audio/correction.aiff "Let's do the call at two, no wait, three PM."
+          say -o .audio/list.aiff "For the offsite we need three things. First, a venue. Second, catering. And third, a projector for the demo. I'll send a calendar invite once we pick a date."
+          for f in .audio/*.aiff; do afconvert -f WAVE -d LEI16@16000 "$f" "${f%.aiff}.wav"; done
+
+      - name: End-to-end bench (Parakeet + cleanup LLM, speculative vs plain)
+        run: |
+          .build/release/murmur-bench --model "$CLEANUP_MODEL" --model-id qwen3-1.7b --compare \
+            --audio .audio/filler.wav --audio .audio/correction.wav --audio .audio/list.wav \
+            --cases evals/cases.jsonl
+
+      - name: LLM tests
+        env:
+          MURMUR_TEST_MODEL: ${{ env.CLEANUP_MODEL }}
+          MURMUR_TEST_MODEL_ID: qwen3-1.7b
+        run: swift test -c release --filter MurmurKitTests

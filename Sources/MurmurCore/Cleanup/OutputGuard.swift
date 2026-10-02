@@ -28,7 +28,10 @@ public enum OutputGuard {
                 if !inner.contains(open) { text = String(inner).trimmingCharacters(in: .whitespacesAndNewlines) }
             }
         }
-        return text
+        // Markdown-style hard breaks ("line  \n") are noise outside a markdown renderer.
+        return text.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression) }
+            .joined(separator: "\n")
     }
 
     public static func check(input: String, output rawOutput: String, cues: Set<CleanupCue>) -> Verdict {

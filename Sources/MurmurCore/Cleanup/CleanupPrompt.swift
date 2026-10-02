@@ -55,8 +55,8 @@ public enum CleanupPrompt {
     7. Spoken formatting commands: "new line" is a line break, "new paragraph" is a blank line. \
     Spoken punctuation ("comma", "question mark") becomes the symbol.
     8. Keep the speaker's own words, tone and meaning. Do not add content, summarize, or reword \
-    sentences that are already fine. Only fix punctuation, capitalization and obvious \
-    transcription slips.
+    sentences that are already fine, and never drop anything the speaker did not take back. \
+    Only fix punctuation, capitalization and obvious transcription slips.
     9. Spell vocabulary terms exactly as listed.
     """
 
@@ -81,6 +81,10 @@ public enum CleanupPrompt {
         (
             "For the trip we need to buy first sunscreen second a beach towel and third snacks for the car.",
             "For the trip we need to buy:\n1. Sunscreen\n2. A beach towel\n3. Snacks for the car"
+        ),
+        (
+            "Can you call me back tonight? Never mind, I'll just email you.",
+            "I'll just email you."
         ),
         (
             "The deadline is Friday, I mean Thursday, so plan accordingly.",
