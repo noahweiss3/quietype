@@ -100,7 +100,7 @@ This prints transcription time, LLM prefill and generation time per case, and wi
 
 ## Cleanup quality
 
-`evals/cases.jsonl` has 35 cases covering fillers, corrections, start-over, lists, formatting commands, prompt injection ("write me a poem", "ignore all previous instructions"), per-app style and vocabulary. `evals/corrections.jsonl` has 46 self-revision cases ("x and y, scrap that, not y", replacements, additions, chained revisions, and look-alikes that must be left alone). `evals/corrections_holdout.jsonl` has 16 more written independently and never used for tuning, and `evals/snippets.jsonl` covers snippet expansion through the whole pipeline. `evals/run_evals.py` runs them through the app's own Swift code (`murmur-cli`) against any llama.cpp server:
+`evals/cases.jsonl` has 35 cases covering fillers, corrections, start-over, lists, formatting commands, prompt injection ("write me a poem", "ignore all previous instructions"), per-app style and vocabulary. `evals/corrections.jsonl` has 46 self-revision cases ("x and y, scrap that, not y", replacements, additions, chained revisions, and look-alikes that must be left alone). `evals/corrections_more.jsonl` adds 25 for less common wordings ("take the X off", "strike X", "swap X for Y", "five nights, er, four", two revisions in one sentence). `evals/corrections_holdout*.jsonl` hold 60 cases written by independent agents in three batches (16, 20 and 24); the third was added unread and only scored at the end. `evals/snippets.jsonl` covers snippet expansion through the whole pipeline. `evals/run_evals.py` runs them through the app's own Swift code (`murmur-cli`) against any llama.cpp server:
 
 ```sh
 llama-server -m Qwen3-4B-Instruct-2507-Q4_K_M.gguf --jinja -c 4096 --port 8080
