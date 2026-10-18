@@ -136,18 +136,23 @@ public enum MeetingNotesPrompt {
     /// Names people used on the call: introductions on the call's side ("Priya here", "This is
     /// Marcus", "Marcus again") and people You address ("Hi Dana", "thanks, Dana", "Marcus, can
     /// you…"). A small model rarely carries these through on its own, so they're listed for it.
-    /// The patterns also catch capitalized words that start a sentence ("Same here", "Now, can
-    /// we…") and days and months ("It's Thursday"), so those are filtered out.
+    /// The patterns also catch capitalized words that start a sentence ("Same here", "Overall,
+    /// how…"), days and months ("It's Thursday") and companies ("It's Acme's"), so those are
+    /// filtered out, as is any word that is also said in lower case ("still", "both").
     public static func names(in segments: [MeetingSegment]) -> [String] {
         let name = "([A-Z][a-z]+)"
         let introductions = [
             "\\b\(name) (?:here|again)\\b",
-            "\\b(?:[Tt]his is|[Ii]t's|I'm) \(name)\\b",
+            // "This is Marcus." / "It's Dana from Acme", but not "It's Acme's account" or "This is Google Meet".
+            "\\b(?:[Tt]his is|[Ii]t's|I'm) \(name)(?=[.,;!?]|\\s+(?:from|here|speaking|again|with|at|on)\\b|\\s*$)",
         ]
         let addressed = [
             "(?:^|[.!?,;]\\s+)(?:[Hh]i|[Hh]ey|[Hh]ello|[Tt]hanks|[Tt]hank you|[Bb]ye|[Mm]orning),? \(name)\\b",
             "(?:^|[.!?]\\s+)\(name), (?:can|could|would|will|where|what|how|do|did|are|is)\\b",
         ]
+        let lowerCaseWords = Set(segments.flatMap { segment in
+            segment.text.split { !$0.isLetter }.filter { $0.first?.isLowercase == true }.map(String.init)
+        })
         var found: [String] = []
         for segment in segments {
             for pattern in segment.speaker == .others ? introductions : addressed {
@@ -156,7 +161,10 @@ public enum MeetingNotesPrompt {
                 for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
                     guard let range = Range(match.range(at: 1), in: text) else { continue }
                     let candidate = String(text[range])
-                    if !notNames.contains(candidate), !found.contains(candidate) { found.append(candidate) }
+                    guard !notNames.contains(candidate), !lowerCaseWords.contains(candidate.lowercased()),
+                          !adverbEndings.contains(where: { candidate.hasSuffix($0) }), !found.contains(candidate)
+                    else { continue }
+                    found.append(candidate)
                 }
             }
         }
@@ -175,7 +183,16 @@ public enum MeetingNotesPrompt {
         "Nobody", "Somebody", "Someone", "Anyone", "Everybody", "Here", "There", "Again", "Quick",
         "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Today",
         "Tomorrow", "Tonight", "January", "February", "March", "April", "May", "June", "July",
-        "August", "September", "October", "November", "December",
+        "August", "September", "October", "November", "December", "Overall", "Otherwise", "Still",
+        "Not", "Both", "Either", "Neither", "Each", "Just", "Only", "Even", "Maybe", "Perhaps",
+        "Instead", "Meanwhile", "However", "Besides", "Plus", "Like", "Yet", "Already", "Ok", "Thank",
+    ]
+
+    /// "Realistically, what…", "Hopefully, can…": sentence openers, never names (Emily and Kelly
+    /// don't end like this).
+    private static let adverbEndings = [
+        "ally", "ously", "ately", "ently", "antly", "ctly", "tely", "fully", "ably", "ibly", "edly",
+        "ingly", "ckly", "nkly", "stly", "ssly", "rely",
     ]
 
     /// Transcript lines for the prompt.

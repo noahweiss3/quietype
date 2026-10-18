@@ -188,14 +188,15 @@ final class MeetingController: ObservableObject {
         }
         // The notes context holds most of a gigabyte of KV cache; let it go.
         writer = nil
-        savedFile = save()
+        // Nothing was heard (stopped while starting, or silence throughout): no empty file.
+        savedFile = transcript.segments.isEmpty ? nil : save()
         state = .finished
         onFinished()
     }
 
     /// Writes what there is so far; called when the app quits mid-meeting.
     func saveNow() {
-        guard state == .recording || state == .finishing else { return }
+        guard state == .recording || state == .finishing, !transcript.segments.isEmpty else { return }
         savedFile = save()
     }
 
@@ -271,7 +272,7 @@ final class MeetingController: ObservableObject {
 
     /// Saves every half minute while recording, so quitting or a crash loses little.
     private func autosave() {
-        guard state == .recording, Date().timeIntervalSince(lastSave) >= 30 else { return }
+        guard state == .recording, !transcript.segments.isEmpty, Date().timeIntervalSince(lastSave) >= 30 else { return }
         lastSave = Date()
         savedFile = save()
     }

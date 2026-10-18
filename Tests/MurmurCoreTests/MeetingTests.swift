@@ -383,6 +383,21 @@ final class MeetingNotesTests: XCTestCase {
         ]
         XCTAssertEqual(MeetingNotesPrompt.names(in: noNames), [])
         XCTAssertEqual(MeetingNotesPrompt.names(in: [segment(0, .others, 0, 3, "Hi, it's Dana from Acme.")]), ["Dana"])
+        let openersAndCompanies = [
+            segment(0, .me, 0, 3, "Overall, how did the first year go?"),
+            segment(1, .me, 4, 6, "Realistically, what's the timeline?"),
+            segment(2, .me, 7, 9, "Thanks Both."),
+            segment(3, .others, 10, 12, "Not here yet."),
+            segment(4, .others, 13, 15, "It's Acme's biggest account."),
+            segment(5, .others, 16, 18, "This is Google Meet acting up."),
+        ]
+        XCTAssertEqual(MeetingNotesPrompt.names(in: openersAndCompanies), [])
+        let saidLowerCase = [
+            segment(0, .me, 0, 3, "Still, can we make Friday?"),
+            segment(1, .others, 4, 6, "We're still waiting on legal."),
+        ]
+        XCTAssertEqual(MeetingNotesPrompt.names(in: saidLowerCase), [])
+        XCTAssertEqual(MeetingNotesPrompt.names(in: [segment(0, .me, 0, 3, "Hi Emily, thanks for joining.")]), ["Emily"])
         let content = MeetingNotesPrompt.messages(notes: "", newTranscript: "x", isFinal: false, names: ["Dana"])[1].content
         XCTAssertTrue(content.contains("People named on the call: Dana."))
     }

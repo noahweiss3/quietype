@@ -43,7 +43,7 @@ struct MeetingView: View {
                 Text("Finishing transcript and notes…")
             case .finished:
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                Text("Saved")
+                Text(meeting.savedFile == nil && meeting.transcript.segments.isEmpty ? "Nothing was heard, so nothing was saved" : "Saved")
             }
             Spacer()
             if meeting.state == .finished {
