@@ -18,8 +18,10 @@ final class MeetingController: ObservableObject {
     @Published private(set) var transcript = MeetingTranscript()
     @Published private(set) var notes = ""
     @Published private(set) var isUpdatingNotes = false
-    /// Something the user should know: no call audio, no notes model, a failed update.
+    /// Something the user should know: no call audio, no notes model.
     @Published private(set) var warning: String?
+    /// Why the last notes update failed; cleared by the next one that works.
+    @Published private(set) var notesError: String?
     @Published private(set) var startedAt: Date?
     @Published private(set) var savedFile: URL?
 
@@ -35,6 +37,7 @@ final class MeetingController: ObservableObject {
     private var feeders: [Task<Void, Never>] = []
     private var ticker: Task<Void, Never>?
     private var lastNotesUpdate = Date()
+    private var lastSave = Date.distantPast
 
     init(transcriber: SpeechTranscriber) {
         self.transcriber = transcriber
@@ -53,11 +56,17 @@ final class MeetingController: ObservableObject {
         transcript = MeetingTranscript()
         notes = ""
         warning = nil
+        notesError = nil
         savedFile = nil
 
         let session = MeetingSession(transcriber: transcriber)
+        let id = ObjectIdentifier(session)
         await session.setOnUpdate { [weak self] transcript in
-            Task { @MainActor in self?.transcript = transcript }
+            Task { @MainActor in
+                // Ignore updates that land after Stop has taken the final transcript.
+                guard let self, let current = self.session, ObjectIdentifier(current) == id else { return }
+                self.transcript = transcript
+            }
         }
         self.session = session
 
@@ -85,11 +94,13 @@ final class MeetingController: ObservableObject {
 
         startedAt = Date()
         lastNotesUpdate = Date()
+        lastSave = Date()
         state = .recording
         ticker = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
                 await self?.refreshNotesIfDue()
+                self?.autosave()
             }
         }
     }
@@ -104,17 +115,27 @@ final class MeetingController: ObservableObject {
         for feeder in feeders { await feeder.value }
         feeders = []
 
-        guard let session else { return }
+        guard let session else {
+            state = .idle
+            return
+        }
         transcript = await session.finish()
+        self.session = nil
         if let writer {
             isUpdatingNotes = true
             await writer.update(with: transcript, final: true)
             notes = await writer.notes
+            notesError = await writer.lastError
             isUpdatingNotes = false
         }
         savedFile = save()
-        self.session = nil
         state = .finished
+    }
+
+    /// Writes what there is so far; called when the app quits mid-meeting.
+    func saveNow() {
+        guard state == .recording || state == .finishing else { return }
+        savedFile = save()
     }
 
     func copyNotes() {
@@ -146,8 +167,15 @@ final class MeetingController: ObservableObject {
         isUpdatingNotes = true
         await writer.update(with: current)
         notes = await writer.notes
-        if let error = await writer.lastError { warning = "Notes update failed: \(error)" }
+        notesError = await writer.lastError
         isUpdatingNotes = false
+    }
+
+    /// Saves every half minute while recording, so quitting or a crash loses little.
+    private func autosave() {
+        guard state == .recording, Date().timeIntervalSince(lastSave) >= 30 else { return }
+        lastSave = Date()
+        savedFile = save()
     }
 
     private func save() -> URL? {

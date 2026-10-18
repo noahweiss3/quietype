@@ -101,6 +101,10 @@ struct MeetingView: View {
                     Text("Updating…").font(.caption).foregroundStyle(.secondary)
                 }
             }
+            if let error = meeting.notesError {
+                Text("The last notes update didn't work and will be retried: \(error)")
+                    .font(.caption).foregroundStyle(.orange).lineLimit(3)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
                     if meeting.notes.isEmpty {

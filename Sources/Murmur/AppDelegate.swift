@@ -30,6 +30,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !settings.hasCompletedSetup || !Permissions.accessibilityGranted { showSettings() }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        controller.meeting.saveNow()
+    }
+
     private func updateIcon(recording: Bool, meeting: Bool) {
         let name = meeting ? "record.circle" : recording ? "waveform.circle.fill" : "waveform"
         statusItem.button?.image = NSImage(systemSymbolName: name, accessibilityDescription: "Murmur")
