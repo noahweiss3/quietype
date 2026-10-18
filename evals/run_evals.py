@@ -77,6 +77,7 @@ def main():
     parser.add_argument("--no-think", action="store_true", help="disable thinking for hybrid models like Qwen3")
     parser.add_argument("--only", help="comma-separated case ids")
     parser.add_argument("--label", default="run")
+    parser.add_argument("--print-json", action="store_true", help="also print every result as JSON lines")
     args = parser.parse_args()
 
     cases = [json.loads(l) for l in open(args.cases) if l.strip()]
@@ -87,7 +88,7 @@ def main():
     prepped = {p["id"]: p for p in cli(["prep"], [
         {"id": c["id"], "input": c["input"], "style": c.get("style"), "vocabulary": c.get("vocabulary")} for c in cases])}
 
-    finish_inputs, llm_times, llm_tokens = [], [], []
+    finish_inputs, llm_times, llm_tokens, llm_outputs = [], [], [], {}
     for case in cases:
         prep = prepped[case["id"]]
         item = {"id": case["id"], "input": case["input"], "style": case.get("style"),
@@ -96,6 +97,7 @@ def main():
             words = len(prep["rules_text"].split())
             output, seconds, timings = chat(args.server, prep["messages"], words * 3 + 64, args.no_think)
             item["llm_output"] = output
+            llm_outputs[case["id"]] = output
             llm_times.append(seconds)
             llm_tokens.append(timings.get("predicted_n", 0))
         finish_inputs.append(item)
@@ -113,8 +115,12 @@ def main():
         cat = by_category.setdefault(case.get("category", "other"), [0, 0])
         cat[0] += ok
         cat[1] += 1
-        report.append({"id": case["id"], "ok": ok, "path": result["path"], "output": result["text"],
-                       "failures": failures, "note": result.get("note")})
+        prep = prepped[case["id"]]
+        report.append({"id": case["id"], "category": case.get("category"), "style": case.get("style"),
+                       "input": case["input"], "intent": case.get("intent", case.get("expect")),
+                       "rules_text": prep["rules_text"], "cues": prep["cues"],
+                       "llm_output": llm_outputs.get(case["id"]), "ok": ok, "path": result["path"],
+                       "output": result["text"], "failures": failures, "note": result.get("note")})
         mark = "PASS" if ok else "FAIL"
         print(f"{mark} {case['id']:<28} [{result['path']}] {result['text']!r}")
         for f in failures:
@@ -132,6 +138,12 @@ def main():
     out_dir = ROOT / "evals/results"
     out_dir.mkdir(exist_ok=True)
     (out_dir / f"{args.label}.json").write_text(json.dumps(report, indent=2))
+    if args.print_json:
+        # One line per case between markers, so CI logs can be parsed back into results.
+        print(f"=== RESULTS {args.label} ===")
+        for entry in report:
+            print(json.dumps(entry, ensure_ascii=False))
+        print(f"=== END {args.label} ===")
     return 0 if passed == len(cases) else 1
 
 

@@ -1,0 +1,94 @@
+# Runs the cleanup evals (rules + prompt + guard through murmur-cli) against the recommended
+# cleanup model on a Linux runner, using llama.cpp's server on the CPU. Results are printed to
+# the log as JSON lines and uploaded as an artifact.
+name: Cleanup evals
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - evals/**
+      - Sources/MurmurCore/**
+      - Sources/murmur-cli/**
+      - Tests/MurmurCoreTests/**
+      - .github/workflows/evals.yml
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Core tests (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+
+  evals:
+    name: Evals (Qwen3 4B, llama.cpp CPU)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      # Same model and llama.cpp release the app uses.
+      MODEL_URL: https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+      MODEL: ${{ github.workspace }}/.models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+      LLAMA_TAG: b11351
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: .models
+          key: eval-models-qwen3-4b-2507-q4km
+
+      - uses: actions/cache@v4
+        id: llama-cache
+        with:
+          path: .llama
+          key: llama-server-${{ env.LLAMA_TAG }}-avx2-static
+
+      - name: Build llama-server
+        if: steps.llama-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "$LLAMA_TAG" https://github.com/ggml-org/llama.cpp "$RUNNER_TEMP/llama.cpp"
+          cmake -S "$RUNNER_TEMP/llama.cpp" -B "$RUNNER_TEMP/llama-build" -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF -DLLAMA_CURL=OFF -DGGML_NATIVE=OFF -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON
+          cmake --build "$RUNNER_TEMP/llama-build" --target llama-server -j "$(nproc)"
+          mkdir -p .llama && cp "$RUNNER_TEMP/llama-build/bin/llama-server" .llama/
+
+      - name: Download model
+        run: |
+          mkdir -p .models
+          [ -f "$MODEL" ] || curl -sSL --fail -o "$MODEL" "$MODEL_URL"
+          ls -la .models
+
+      - name: Build murmur-cli
+        run: swift build --product murmur-cli
+
+      - name: Start llama-server
+        run: |
+          nproc
+          .llama/llama-server -m "$MODEL" --jinja -c 4096 -np 1 -t "$(nproc)" --port 8080 > "$RUNNER_TEMP/server.log" 2>&1 &
+          for i in $(seq 1 120); do
+            curl -sf http://127.0.0.1:8080/health && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:8080/health || (cat "$RUNNER_TEMP/server.log"; exit 1)
+
+      - name: Existing cases (smart mode)
+        run: python3 evals/run_evals.py --label cases --print-json || true
+
+      - name: Correction cases
+        run: python3 evals/run_evals.py --cases evals/corrections.jsonl --label corrections --print-json || true
+
+      - name: Held-out correction cases
+        if: hashFiles('evals/corrections_holdout.jsonl') != ''
+        run: python3 evals/run_evals.py --cases evals/corrections_holdout.jsonl --label holdout --print-json || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: evals/results/
