@@ -30,7 +30,7 @@ public enum Rules {
         var words = Words.split(text)
         words = removeFillers(words)
         words = collapseStutters(words)
-        text = Words.join(words)
+        text = applyTrailingRetraction(Words.join(words))
         return RulesResult(text: text, cues: detectCues(text))
     }
 
@@ -51,6 +51,28 @@ public enum Rules {
         var rest = Words.split(String(text[end...]))
         if !rest.isEmpty { rest[0].capitalize() }
         return Words.join(rest)
+    }
+
+    // MARK: Trailing retraction
+
+    // "… Scratch that." as the last sentence takes back the sentence before it. Earlier in a
+    // dictation the command can be followed by what to keep instead ("scratch that, not the
+    // wings"), so that is left to the LLM.
+    private static let trailingRetraction = try! NSRegularExpression(
+        pattern: #"(?:^|(?<=[.!?]))\s*(?:(?:oh|no|wait|actually|sorry|ok(?:ay)?)[,.]?\s+)*(?:scratch that|scrap that|strike that|delete that|never ?mind|i take that back|forget that|forget it)[.!]*\s*$"#,
+        options: [.caseInsensitive]
+    )
+
+    /// Drops a closing "scratch that" together with the sentence it refers to.
+    static func applyTrailingRetraction(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = trailingRetraction.firstMatch(in: text, range: range),
+              let command = Range(match.range, in: text) else { return text }
+        var words = Words.split(String(text[..<command.lowerBound]))
+        var start = words.count
+        while start > 0, start == words.count || !words[start - 1].endsSentence { start -= 1 }
+        words.removeSubrange(start...)
+        return Words.join(words)
     }
 
     // MARK: Fillers
@@ -131,7 +153,17 @@ public enum Rules {
     // MARK: Cues
 
     private static let cuePatterns: [(CleanupCue, NSRegularExpression)] = [
-        (.correction, #"\b(scratch that|strike that|delete that|cancel that|undo that|never ?mind|no,? wait|wait,? no|i mean|actually|sorry|correction|or rather|make that|let me rephrase|rephrase that|start over|start again|scratch)\b"#),
+        (.correction, #"\b(scratch that|scrap that|strike that|delete that|cancel that|undo that|take that back|never ?mind|no,? wait|wait,? no|i mean|i meant|actually|sorry|correction|better yet|make that|change that|on second thought|i misspoke|let me correct|let me rephrase|rephrase that|start over|start again|scratch|scrap)\b"#),
+        // Narrower forms of words that are usually ordinary text: "…, or rather Wednesday",
+        // "…, and make it 4", "…Kestrel instead.", "the parser, no, the lexer".
+        (.correction, #"(?:\bor|[,;])\s+rather\b|(?:^|[,.;!?]\s+)(?:and\s+)?make it\b|\binstead(?=\s*[.,;!?]|\s*$)|[,;]\s+no,\s"#),
+        // A false start that breaks off after an article or preposition: "Can we push the, I'd like…".
+        (.correction, #"\b(?:the|a|an|to|of|for|with|my|our|your|their),\s"#),
+        // A revision aimed at something just said: "…, skip the butter", "…. Not Jordan.", "…, just
+        // marketing", "…. Oh, and drinks". It has to follow a pause, so "skip the intro" at the start
+        // or "we decided to drop it" mid-sentence don't count.
+        (.correction, #"[,.;!?]\s+(?:(?:oh|ok(?:ay)?|wait|actually|and|so|no|hmm|but|also)[,.]?\s+)*(?:drop|skip|forget|ignore|remove|delete|cut|lose|take out|take off|leave out|leave off|minus|without|except|exclude|not|just|only|and also|add)\b"#),
+        (.correction, #"(?:^|[,.;!?]\s*)(?:oh,? )?wait[,.!]"#),
         (.list, #"\b(first(ly)?\b.*\bsecond(ly)?|number one\b.*\bnumber two|bullet( point)?s?|numbered list|bulleted list|to-?do list|the following|next item|item one)\b"#),
         (.list, #"(^|\s)(one|1)[,.:)]\s.*\s(two|2)[,.:)]\s"#),
         (.filler, #"\byou know\b|\bsort of\b|\b(was|were|is|it's|and|just|so|but|um|uh),? like,? \b|, like,"#),
@@ -149,7 +181,7 @@ public enum Rules {
 
     // MARK: Fallback corrections
 
-    private static let scratchVerbs: Set<String> = ["scratch", "strike", "delete", "cancel", "undo"]
+    private static let scratchVerbs: Set<String> = ["scratch", "scrap", "strike", "delete", "cancel", "undo"]
 
     /// A best-effort, no-LLM version of "scratch that", used when the LLM is off or its answer
     /// was rejected. After a full sentence it drops that sentence; mid-sentence it drops the

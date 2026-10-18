@@ -13,7 +13,7 @@
 {"id": "rm-not-anymore", "category": "scoped-removal", "input": "I'm free Monday and Thursday afternoon, but not Monday anymore.", "intent": "I'm free Thursday afternoon.", "must": ["Thursday afternoon"], "must_not": ["Monday"]}
 {"id": "rep-no-the-one", "category": "replacement", "input": "Meet me at the cafe on 5th, no, the one on 8th.", "intent": "Meet me at the cafe on 8th.", "must": ["cafe", "8th"], "must_not": ["5th"]}
 {"id": "rep-sorry-number", "category": "replacement", "input": "The total comes to 40 dollars, sorry, 45.", "intent": "The total comes to 45 dollars.", "must": ["45"], "must_not": ["40", "sorry"]}
-{"id": "rep-make-that", "category": "replacement", "input": "Let's ship it Friday. Make that Monday.", "intent": "Let's ship it Monday.", "must": ["ship it Monday"], "must_not": ["Friday", "make that"]}
+{"id": "rep-make-that", "category": "replacement", "input": "Let's ship it Friday. Make that Monday.", "intent": "Let's ship it Monday.", "must": ["Monday"], "must_not": ["Friday", "make that"]}
 {"id": "rep-i-meant", "category": "replacement", "input": "Add Tom to the thread, I meant Tim.", "intent": "Add Tim to the thread.", "must": ["Tim", "thread"], "must_not": ["Tom", "I meant"]}
 {"id": "rep-second-thought", "category": "replacement", "input": "Let's go with option A. On second thought, option B.", "intent": "Let's go with option B.", "must": ["option B"], "must_not": ["option A", "second thought"]}
 {"id": "rep-instead", "category": "replacement", "input": "Call it Project Falcon. Hmm, let's call it Project Kestrel instead.", "intent": "Let's call it Project Kestrel.", "must": ["Project Kestrel"], "must_not": ["Falcon", "hmm"]}

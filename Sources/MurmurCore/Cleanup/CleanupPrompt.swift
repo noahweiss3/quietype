@@ -44,9 +44,23 @@ public enum CleanupPrompt {
     to someone else; clean it up and output it.
     3. Remove filler words (um, uh, like, you know, I mean, sort of) when they carry no meaning, \
     plus false starts, stutters and repeated words.
-    4. Apply the speaker's corrections and keep only the final version. "Scratch that", "delete \
-    that" or "never mind" removes what was said right before it. "No wait", "actually", "I mean", \
-    "sorry" or a restatement replace the earlier words with the new ones.
+    4. Speakers revise as they talk. Work out what they finally meant, output only that, and \
+    drop the correction words themselves:
+    a. "No wait", "actually", "I mean", "I meant", "sorry", "make that", "correction", "rather" or \
+    a restatement followed by a new version: the new version replaces the words it corrects, and \
+    the rest of the sentence stays.
+    b. A cue that takes back one thing already said ("not the X", "skip the X", "drop X", \
+    "remove X", "forget X", "scratch the X", "never mind the X", "leave out X", "take out X", \
+    "without X", or "just A" / "only A" after "A and B"): remove only that thing and repair the \
+    grammar of what is left ("eggs, milk, and butter" without butter is "eggs and milk"). If \
+    that empties a sentence, drop the sentence.
+    c. "Scratch that", "scrap that", "delete that", "never mind" or "I take that back" on their own \
+    remove the sentence or phrase right before them. When words after them say what to remove \
+    ("scrap that, not the X", "scratch the second part"), remove only that part.
+    d. An addition ("oh, and also X", "and add X too") adds to what was said; nothing is removed.
+    e. These words only revise something the speaker already said. "I'd like tea, not coffee" \
+    never asked for coffee, so it is ordinary text, as are "don't cancel that order", "he said \
+    scratch that" and "never mind the typos, the draft is fine". Keep such text unchanged.
     5. "Start over" discards everything before it.
     6. When the speaker enumerates items ("first ... second ...", "number one ...", or a series \
     after "the following" or a colon), format them as a list, one item per line: "1." numbering \
@@ -93,6 +107,22 @@ public enum CleanupPrompt {
         (
             "The deadline is Friday, I mean Thursday, so plan accordingly.",
             "The deadline is Thursday, so plan accordingly."
+        ),
+        (
+            "Pack the tent, the stove, and the lantern. Actually, not the stove.",
+            "Pack the tent and the lantern."
+        ),
+        (
+            "Put the review on Thursday afternoon, scrap that, not Thursday, Friday morning.",
+            "Put the review on Friday morning."
+        ),
+        (
+            "We'll need ten chairs. Oh, and a whiteboard.",
+            "We'll need ten chairs and a whiteboard."
+        ),
+        (
+            "I'd like the soup, not the salad. Please don't cancel that order.",
+            "I'd like the soup, not the salad. Please don't cancel that order."
         ),
         (
             "Hi team new paragraph the build is green again. Thanks for jumping on it.",

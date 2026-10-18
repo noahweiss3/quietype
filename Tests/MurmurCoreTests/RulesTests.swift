@@ -48,7 +48,44 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(Rules.apply("First eggs, second milk, third bread.").cues, [.list])
         XCTAssertEqual(Rules.apply("1. eggs 2. milk").cues, [.list])
         XCTAssertEqual(Rules.apply("Hi new paragraph thanks").cues, [.formatting])
-        XCTAssertTrue(Rules.apply("I'll be late. Scratch that.").needsLLM)
+        XCTAssertTrue(Rules.apply("I'll be late. Scratch that. I'll be early.").needsLLM)
+    }
+
+    func testClosingScratchThatDropsTheSentenceBefore() {
+        XCTAssertEqual(clean("Send the invoice to Acme today. Scratch that."), "")
+        XCTAssertEqual(clean("Thanks for the update. Also, your numbers are wrong. Scratch that."), "Thanks for the update.")
+        XCTAssertEqual(clean("Can you grab coffee? Um, never mind."), "")
+        XCTAssertEqual(clean("Looks good to me. The tests are flaky though. Actually, I take that back."), "Looks good to me.")
+        // Only a standalone closing command counts.
+        XCTAssertEqual(clean("She said scratch that."), "She said scratch that.")
+        XCTAssertEqual(clean("I want pizza and wings, scrap that."), "I want pizza and wings, scrap that.")
+        XCTAssertEqual(clean("Never mind the noise, the call went fine."), "Never mind the noise, the call went fine.")
+    }
+
+    func testRevisionCues() {
+        let revisions = [
+            "I want pizza and wings, scrap that, not the wings.",
+            "Can you add eggs, milk, and butter to the list? Wait, skip the butter.",
+            "Invite Sam and Jordan to the review. Actually, not Jordan.",
+            "Send the deck to marketing and sales, no, just marketing.",
+            "Add Tom to the thread, I meant Tim.",
+            "Let's go with option A. On second thought, option B.",
+            "Bring snacks. Oh, and also drinks.",
+            "Book flights for Monday and Tuesday. Oh wait, take out Tuesday.",
+            "We need chairs, tables, and a projector. Forget the projector.",
+        ]
+        for text in revisions {
+            XCTAssertTrue(Rules.apply(text).cues.contains(.correction), text)
+        }
+        // The same verbs as ordinary text: nothing before them to revise.
+        let ordinary = [
+            "Skip the intro and go straight to the demo.",
+            "We decided to drop the offsite this year.",
+            "No, I don't think that works for us.",
+        ]
+        for text in ordinary {
+            XCTAssertFalse(Rules.apply(text).cues.contains(.correction), text)
+        }
     }
 
     func testFallbackScratchThatDropsThePreviousSentence() {
@@ -64,6 +101,7 @@ final class RulesTests: XCTestCase {
 
     func testFallbackScratchThatMidSentenceDropsOneWord() {
         XCTAssertEqual(Rules.applyFallbackCorrections("I'll meet you at 3, scratch that, 4."), "I'll meet you at 4.")
+        XCTAssertEqual(Rules.applyFallbackCorrections("I'll meet you at 3, scrap that, 4."), "I'll meet you at 4.")
     }
 
     func testFallbackLeavesOrdinaryUseAlone() {
