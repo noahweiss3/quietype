@@ -214,5 +214,40 @@
    "Build green, QA signed off",
    "Tuesday rejected: docs not ready and sales offsite"
   ]
+ },
+ "checks": {
+  "must": [
+   "Thursday",
+   "45",
+   "Priya",
+   "Marcus",
+   "legal",
+   "free"
+  ],
+  "must_not": [
+   "Someone",
+   "40 companies"
+  ],
+  "sections": {
+   "Action items": {
+    "must": [
+     "Priya",
+     "Marcus",
+     "legal",
+     "design"
+    ],
+    "must_not": [
+     "confirm beta date"
+    ]
+   },
+   "Decisions": {
+    "must": [
+     "Thursday"
+    ],
+    "must_not": [
+     "Tuesday"
+    ]
+   }
+  }
  }
 }

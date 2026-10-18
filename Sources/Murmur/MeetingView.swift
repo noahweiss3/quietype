@@ -51,7 +51,7 @@ struct MeetingView: View {
             if meeting.state == .recording || meeting.state == .finished {
                 Button("Copy Notes & Transcript") { meeting.copyNotes() }
             }
-            if meeting.state == .recording {
+            if meeting.state == .recording || meeting.state == .starting {
                 Button("Stop") { Task { await meeting.stop() } }.keyboardShortcut(".", modifiers: .command)
             } else {
                 Button(meeting.state == .finished ? "New Meeting" : "Start") { Task { await meeting.start() } }

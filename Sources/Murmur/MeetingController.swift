@@ -46,6 +46,8 @@ final class MeetingController: ObservableObject {
     private var notesFailures = 0
     private var lastSave = Date.distantPast
     private var fileURL: URL?
+    /// Stop was pressed while the meeting was still starting (loading the notes model can take a while).
+    private var stopRequested = false
 
     init(transcriber: SpeechTranscriber) {
         self.transcriber = transcriber
@@ -110,6 +112,7 @@ final class MeetingController: ObservableObject {
         }
         guard sources > 0 else {
             self.session = nil
+            stopRequested = false
             state = .idle
             return
         }
@@ -135,9 +138,14 @@ final class MeetingController: ObservableObject {
                 await self?.tick()
             }
         }
+        if stopRequested {
+            stopRequested = false
+            await stop()
+        }
     }
 
     func stop() async {
+        if state == .starting { return stopRequested = true }
         guard state == .recording else { return }
         state = .finishing
         ticker?.cancel()
@@ -212,7 +220,7 @@ final class MeetingController: ObservableObject {
 
     private func tick() async {
         await refreshNotesIfDue()
-        if let session, let error = await session.lastError {
+        if let session, let error = await session.takeError() {
             warn("Some speech couldn't be transcribed: \(error)")
         }
         autosave()

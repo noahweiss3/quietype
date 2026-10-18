@@ -81,7 +81,7 @@ public final class LlamaCleaner: TextCleaner, @unchecked Sendable {
     /// A generator for longer jobs (meeting notes) on the same model. It has its own context, so
     /// the cleanup prompt stays cached, and runs on this cleaner's queue, so the two never compute
     /// at once and a dictation waits at most for one notes request.
-    public func makeGenerator(contextLength: Int = 6144) async throws -> LlamaGenerator {
+    public func makeGenerator(contextLength: Int = MeetingNotesPrompt.contextTokens) async throws -> LlamaGenerator {
         try await withCheckedThrowingContinuation { continuation in
             queue.async {
                 continuation.resume(with: Result {

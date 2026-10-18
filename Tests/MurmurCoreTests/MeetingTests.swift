@@ -155,6 +155,14 @@ final class MeetingSessionTests: XCTestCase {
         XCTAssertEqual(calls, 0)
     }
 
+    func testQuietCallAudioIsStillTranscribed() async {
+        let fake = FakeTranscriber()
+        let session = MeetingSession(transcriber: fake)
+        await feed(session, tone(4, amplitude: 0.012), from: .others) // RMS about 0.0085
+        let transcript = await session.finish()
+        XCTAssertEqual(transcript.segments.count, 1)
+    }
+
     func testPaddingLinesUpALateStream() async {
         let session = MeetingSession(transcriber: FakeTranscriber())
         await session.appendSilence(seconds: 1.5, to: .others)
@@ -244,9 +252,55 @@ final class MeetingNotesTests: XCTestCase {
         let content = await generator.requests[1][1].content
         XCTAssertTrue(content.contains("[00:00] You: Hello everyone."), "the whole transcript again")
         XCTAssertTrue(content.contains("complete transcript"))
-        XCTAssertTrue(content.contains("- Beta timing"), "with the running notes as a draft")
+        XCTAssertFalse(content.contains("- Beta timing"), "a fresh read, so early slips can't carry over")
         let notes = await writer.notes
         XCTAssertEqual(notes, notesB)
+    }
+
+    func testFailedFinalReadFallsBackToTheRunningNotes() async {
+        let generator = FakeGenerator(replies: [notesA, "garbled", "still garbled", notesB])
+        let writer = MeetingNotesWriter(generator: generator)
+        let transcript = MeetingTranscript(segments: [segment(0, .me, 0, 2, "Hello everyone.")])
+        _ = await writer.update(with: transcript)
+        let final = await writer.update(with: transcript, final: true)
+        XCTAssertTrue(final)
+        let requests = await generator.requests
+        XCTAssertEqual(requests.count, 4, "full read, its retry, then the tidy-up of the running notes")
+        XCTAssertTrue(requests[3][1].content.contains("- Beta timing"))
+        let notes = await writer.notes
+        XCTAssertEqual(notes, notesB)
+    }
+
+    func testAFailedAnswerIsRetriedAskingForShorterNotes() async {
+        let cutOff = "## Summary\n- Beta timing\n## Decisions\n- None yet\n## Action items\n- [ ] You: write rel"
+        let generator = FakeGenerator(replies: [cutOff, notesA])
+        let writer = MeetingNotesWriter(generator: generator)
+        let ok = await writer.update(with: MeetingTranscript(segments: [segment(0, .me, 0, 2, "Hello everyone.")]))
+        XCTAssertTrue(ok)
+        let requests = await generator.requests
+        XCTAssertFalse(requests[0][1].content.contains("getting long"))
+        XCTAssertTrue(requests[1][1].content.contains("getting long"))
+    }
+
+    func testLongNotesAreMergedDownOnTheNextUpdate() async {
+        let bullets = (0..<40).map { "- Topic number \($0) was discussed at some length today" }.joined(separator: "\n")
+        let longNotes = "## Summary\n\(bullets)\n## Decisions\n- None yet\n## Action items\n- None yet\n## Open questions\n- None yet"
+        let generator = FakeGenerator(replies: [longNotes, notesA])
+        let writer = MeetingNotesWriter(generator: generator)
+        var transcript = MeetingTranscript(segments: [segment(0, .me, 0, 2, "Hello everyone.")])
+        _ = await writer.update(with: transcript)
+        transcript.add(segment(1, .others, 3, 5, "Hi there."))
+        _ = await writer.update(with: transcript)
+        let requests = await generator.requests
+        XCTAssertTrue(requests[1][1].content.contains("getting long"))
+    }
+
+    func testFinalReadBudgetFitsTheNotesContext() {
+        let transcriptTokens = MeetingNotesWriter.fullFinalPassWords * 17 / 10
+        XCTAssertLessThanOrEqual(
+            transcriptTokens + MeetingNotesPrompt.maxOutputTokens + 1_200, MeetingNotesPrompt.contextTokens
+        )
+        XCTAssertGreaterThan(MeetingNotesWriter.fullFinalPassWords, 1_500, "a 10-15 minute meeting still gets the full read")
     }
 
     func testFinalPassOnALongMeetingOnlyTidiesTheNotes() async {

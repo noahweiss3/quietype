@@ -15,7 +15,7 @@ usage:
   murmur-cli prep    reads JSONL {"id","input","style"?,"vocabulary"?}, writes {"id","rules_text","cues","needs_llm","messages"}
   murmur-cli finish  reads JSONL {"id","input","llm_output"?,"style"?,"vocabulary"?,"mode"?,"snippets"?}, writes {"id","result"}
   murmur-cli notes-plan    reads JSONL {"id","segments"}, writes {"id","updates":[{"at","segments","final","complete"}]}
-  murmur-cli notes-prep    reads JSONL {"id","notes","segments","final","complete"?}, writes {"id","messages","max_tokens"}
+  murmur-cli notes-prep    reads JSONL {"id","notes","segments","final","complete"?,"known"?,"retry"?}, writes {"id","messages","max_tokens"}
   murmur-cli notes-finish  reads JSONL {"id","previous","output"}, writes {"id","notes","accepted"}
 """
 
@@ -79,6 +79,8 @@ struct NotesPrepCase: Decodable {
     var complete: Bool?
     /// Everything said so far, for the names the app passes along.
     var known: [MeetingSegment]?
+    /// The previous answer failed; ask again the way the app does.
+    var retry: Bool?
 }
 
 struct NotesPrepOutput: Encodable {
@@ -204,10 +206,9 @@ case "notes-prep":
     for item in readLines(NotesPrepCase.self) {
         emit(NotesPrepOutput(
             id: item.id,
-            messages: MeetingNotesPrompt.messages(
-                notes: item.notes, newTranscript: MeetingNotesPrompt.transcriptText(item.segments),
-                isFinal: item.final, complete: item.complete ?? false,
-                names: MeetingNotesPrompt.names(in: MeetingTranscript(segments: item.known ?? item.segments).segments)
+            messages: MeetingNotesPrompt.request(
+                notes: item.notes, segments: item.segments, known: item.known ?? item.segments,
+                final: item.final, complete: item.complete ?? false, retry: item.retry ?? false
             ),
             max_tokens: MeetingNotesPrompt.maxOutputTokens
         ))

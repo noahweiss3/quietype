@@ -141,5 +141,39 @@
    "One-year option would be 12%",
    "Renewal date Dec 15, sign by early December"
   ]
+ },
+ "checks": {
+  "must": [
+   "18",
+   "120",
+   "two-year",
+   "SSO",
+   "Dana",
+   "deal desk",
+   "Friday",
+   "December"
+  ],
+  "must_not": [
+   "Someone",
+   "15%",
+   "fifteen percent"
+  ],
+  "sections": {
+   "Action items": {
+    "must": [
+     "Dana",
+     "deal desk",
+     "timeline"
+    ],
+    "must_not": []
+   },
+   "Decisions": {
+    "must": [],
+    "must_not": [
+     "procurement will",
+     "procurement accept"
+    ]
+   }
+  }
  }
 }

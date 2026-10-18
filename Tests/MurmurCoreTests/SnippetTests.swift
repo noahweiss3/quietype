@@ -106,6 +106,14 @@ final class SnippetTests: XCTestCase {
         let unfinished = Snippet(trigger: "my address", text: "")
         XCTAssertEqual(expand("Ship it to my address please.", [unfinished]), "Ship it to my address please.")
         XCTAssertTrue(Snippets([unfinished]).isEmpty)
+        XCTAssertTrue(Snippets([Snippet(trigger: "my address", text: "  \n ")]).isEmpty)
+    }
+
+    func testTheFirstOfTwoSnippetsWithTheSameTriggerWins() {
+        let first = Snippet(trigger: "my email", text: "first@example.com")
+        let second = Snippet(trigger: "My E-mail", text: "second@example.com")
+        XCTAssertEqual(expand("Use my email.", [first, second]), "Use first@example.com.")
+        XCTAssertEqual(expand("Use my email.", [second, first]), "Use second@example.com.")
     }
 
     func testCodeStylePeriodIsDecidedBeforeExpansion() async {

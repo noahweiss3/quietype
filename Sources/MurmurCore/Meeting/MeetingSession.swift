@@ -17,6 +17,9 @@ public actor MeetingSession {
 
     private let transcriber: SpeechTranscriber
     private let sampleRate: Int
+    /// Quietest level that counts as talking when trimming a stretch: the segmenter's floor, not
+    /// a fixed loudness, so a quiet call isn't trimmed away.
+    private let speechLevel: Float
     // Two stored properties rather than a dictionary, so appending mutates the buffer in place
     // instead of copying it on every chunk.
     private var mic: Channel
@@ -33,6 +36,7 @@ public actor MeetingSession {
     ) {
         self.transcriber = transcriber
         sampleRate = segmenter.sampleRate
+        speechLevel = segmenter.silenceFloor
         mic = Channel(segmenter: segmenter)
         call = Channel(segmenter: segmenter)
     }
@@ -43,6 +47,12 @@ public actor MeetingSession {
     }
 
     public var current: MeetingTranscript { transcript }
+
+    /// The latest transcription error, once: reading it clears it.
+    public func takeError() -> String? {
+        defer { lastError = nil }
+        return lastError
+    }
 
     public func append(_ samples: [Float], from speaker: MeetingSpeaker) {
         let closed = withChannel(speaker) { (channel: inout Channel) -> [(range: Range<Int>, audio: [Float])] in
@@ -95,8 +105,8 @@ public actor MeetingSession {
 
     /// Segments are transcribed one at a time so the speech model is never asked for two at once.
     private func enqueue(_ audio: [Float], speaker: MeetingSpeaker, range: Range<Int>) {
-        guard let speech = SpeechSegmenter.firstSpeech(in: audio, sampleRate: sampleRate),
-              let speechEnd = SpeechSegmenter.lastSpeech(in: audio, sampleRate: sampleRate) else { return }
+        guard let speech = SpeechSegmenter.firstSpeech(in: audio, sampleRate: sampleRate, threshold: speechLevel),
+              let speechEnd = SpeechSegmenter.lastSpeech(in: audio, sampleRate: sampleRate, threshold: speechLevel) else { return }
         // A stretch can open or close with long silence; trim it (keeping a little margin) so the
         // timestamps say when talking happened and the model has less to chew through.
         let lead = max(0, speech - sampleRate / 5)

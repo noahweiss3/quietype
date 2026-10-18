@@ -36,7 +36,9 @@ public struct Snippets: Codable, Equatable, Sendable {
     public var isEmpty: Bool { active.isEmpty }
 
     /// Snippets with something to match and something to type; a half-filled row does nothing.
-    var active: [Snippet] { items.filter { !$0.key.isEmpty && !$0.text.isEmpty } }
+    var active: [Snippet] {
+        items.filter { !$0.key.isEmpty && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
 
     public struct Expansion: Equatable, Sendable {
         public var text: String
@@ -45,8 +47,11 @@ public struct Snippets: Codable, Equatable, Sendable {
     }
 
     public func expand(_ text: String) -> Expansion {
-        // Longest trigger first, so "my work email" wins over "my work".
-        let candidates = active.sorted { $0.key.count > $1.key.count }
+        // Longest trigger first, so "my work email" wins over "my work"; for the same trigger, the
+        // snippet listed first.
+        let candidates = active.enumerated()
+            .sorted { ($0.element.key.count, $1.offset) > ($1.element.key.count, $0.offset) }
+            .map(\.element)
         guard !candidates.isEmpty else { return Expansion(text: text, used: []) }
 
         let words = Self.words(in: text)

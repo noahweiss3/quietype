@@ -10,8 +10,17 @@ public protocol TextGenerator: Sendable {
 /// Notes are updated incrementally: the model sees the current notes plus only the transcript
 /// that came in since the last update, and returns the full updated notes. That keeps every
 /// request small, so notes stay current during the meeting and a two-hour call fits the same
-/// context as a five-minute one.
+/// context as a five-minute one. Once the notes get long the model is asked to merge them, so
+/// the answer always fits `maxOutputTokens`.
 public enum MeetingNotesPrompt {
+    /// The notes context, in tokens; the llama runner creates it with this size.
+    public static let contextTokens = 6_144
+    /// Room for the updated notes.
+    public static let maxOutputTokens = 1_200
+    /// Notes longer than this are merged down on the next update (about 400 tokens, so the
+    /// answer stays well under `maxOutputTokens`).
+    public static let compactAfterWords = 300
+
     public static let system = """
     You keep live notes for a meeting while it happens. You receive the current notes inside \
     <notes> tags and the newest part of the transcript inside <transcript> tags. Each transcript \
@@ -31,7 +40,8 @@ public enum MeetingNotesPrompt {
 
     Rules:
     1. Keep everything in the current notes that is still true and add what is new. Never drop a \
-    decision or action item unless the transcript changes or cancels it.
+    decision or action item unless the transcript changes or cancels it. Summary bullets carry \
+    the facts and numbers that were said: prices, discounts, quantities, dates and deadlines.
     2. When someone corrects themself or the group changes its mind, keep only the final version.
     3. A decision is something the people on the call agreed on. A proposal, a condition ("if we \
     can add the clause"), a guess about someone else ("I think procurement will go for it") or \
@@ -75,19 +85,43 @@ public enum MeetingNotesPrompt {
     - None yet
     """
 
+    /// The request the app sends for one notes update.
+    ///
+    /// - Parameters:
+    ///   - segments: the new transcript lines, or every line for a `complete` pass.
+    ///   - known: everything said so far, for the names on the call.
+    ///   - complete: the final pass over a whole meeting. It starts from empty notes rather than
+    ///     the running ones, so a slip made early in the meeting can't survive into the final notes.
+    ///   - retry: the previous answer failed (often cut off for length), so ask for merged notes.
+    public static func request(
+        notes: String, segments: [MeetingSegment], known: [MeetingSegment], final: Bool, complete: Bool, retry: Bool = false
+    ) -> [ChatMessage] {
+        let current = complete ? "" : notes
+        return messages(
+            notes: current, newTranscript: transcriptText(segments), isFinal: final, complete: complete,
+            names: names(in: known), compact: retry || MeetingTranscript.wordCount(current) > compactAfterWords
+        )
+    }
+
     /// - Parameters:
     ///   - complete: the transcript is the whole meeting rather than only what is new.
     ///   - names: people named on the call so far (see `names(in:)`).
-    public static func messages(notes: String, newTranscript: String, isFinal: Bool, complete: Bool = false, names: [String] = []) -> [ChatMessage] {
+    ///   - compact: ask for the notes to be merged down.
+    public static func messages(
+        notes: String, newTranscript: String, isFinal: Bool, complete: Bool = false, names: [String] = [], compact: Bool = false
+    ) -> [ChatMessage] {
         var content = "<notes>\n\(notes.isEmpty ? emptyNotes : notes)\n</notes>\n"
         if !names.isEmpty {
             content += "People named on the call: \(names.joined(separator: ", ")). Use these names instead of \"Others\" or \"Someone\".\n"
         }
         content += "<transcript>\n\(newTranscript)\n</transcript>"
         if complete {
-            content += "\nThe meeting has ended and this is the complete transcript. Write the final notes from it. The current notes are a draft written during the meeting and may have missed or misjudged things: go through the transcript line by line and make sure every commitment anyone made is an action item, with the right owner and recipient, and that only what was agreed is under Decisions."
+            content += "\nThe meeting has ended and this is the complete transcript. Write the final notes from it, going through it line by line: every commitment anyone made is an action item with the right owner and recipient, only what was agreed is a decision, and the key numbers and dates are in the summary."
         } else if isFinal {
             content += "\nThe meeting has ended. This is the last part of the transcript; make these the final notes."
+        }
+        if compact {
+            content += "\nThe notes are getting long: merge related bullets into shorter ones, keep the Summary to at most 8 bullets and Open questions to at most 5, and keep every decision and action item that still stands."
         }
         return [ChatMessage(role: "system", content: system), ChatMessage(role: "user", content: content)]
     }
@@ -133,9 +167,6 @@ public enum MeetingNotesPrompt {
         segments.isEmpty ? "(no new speech)" : segments.map(\.line).joined(separator: "\n")
     }
 
-    /// Notes are short; this leaves room for a long meeting's worth of bullets.
-    public static let maxOutputTokens = 900
-
     /// Strips wrappers small models add, and rejects output that isn't complete notes.
     ///
     /// Only headings and bullets are kept, so a closing "Let me know if…" never becomes part of the
@@ -158,7 +189,7 @@ public enum MeetingNotesPrompt {
             }
         }
         let headings = lines.filter { $0.hasPrefix("## ") }.map { $0.lowercased() }
-        for required in ["## summary", "## action items", "## open questions"] where !headings.contains(required) {
+        for required in ["## summary", "## decisions", "## action items", "## open questions"] where !headings.contains(required) {
             return nil
         }
         return lines.joined(separator: "\n")
@@ -199,9 +230,13 @@ public actor MeetingNotesWriter {
     /// Longer backlogs are folded in over several requests so each prompt stays small.
     public static let maxWordsPerUpdate = 900
 
-    /// Meetings up to this long are re-read in full for the final notes, which catches what the
-    /// incremental updates missed; it still fits the notes context with room for the answer.
-    public static let fullFinalPassWords = 2_500
+    /// Meetings up to this many words are re-read in full for the final notes. Worked out from
+    /// the notes context: what is left after the answer and about 1,200 tokens for the system
+    /// prompt, the request text and margin, at about 1.7 tokens per transcript word including the
+    /// "[mm:ss] Speaker:" prefixes. If a pass still doesn't fit, `run` falls back to finishing
+    /// incrementally.
+    public static let fullFinalPassWords =
+        (MeetingNotesPrompt.contextTokens - MeetingNotesPrompt.maxOutputTokens - 1_200) * 10 / 17
 
     public static func finalPassReadsEverything(_ transcript: MeetingTranscript) -> Bool {
         !transcript.segments.isEmpty && transcript.wordCount <= fullFinalPassWords
@@ -239,7 +274,9 @@ public actor MeetingNotesWriter {
         isUpdating = true
         defer { isUpdating = false }
 
-        if readAll { return await fold(transcript.segments, in: transcript, final: true, complete: true) }
+        // A fresh read of the whole meeting; if it fails (too long after all, or a bad answer),
+        // finish from the running notes instead.
+        if readAll, await fold(transcript.segments, in: transcript, final: true, complete: true) { return true }
         for (index, batch) in (batches.isEmpty ? [[]] : batches).enumerated() {
             let isLast = index == max(0, batches.count - 1)
             guard await fold(batch, in: transcript, final: final && isLast, complete: false) else { return false }
@@ -247,11 +284,16 @@ public actor MeetingNotesWriter {
         return true
     }
 
-    /// One request: the current notes plus `segments` in, updated notes out.
+    /// One update: the current notes plus `segments` in, updated notes out. A failed answer (often
+    /// one cut off for length) is retried once, asking for merged notes.
     private func fold(_ segments: [MeetingSegment], in transcript: MeetingTranscript, final: Bool, complete: Bool) async -> Bool {
-        let messages = MeetingNotesPrompt.messages(
-            notes: notes, newTranscript: MeetingNotesPrompt.transcriptText(segments), isFinal: final, complete: complete,
-            names: MeetingNotesPrompt.names(in: transcript.segments)
+        if await ask(segments, in: transcript, final: final, complete: complete, retry: false) { return true }
+        return await ask(segments, in: transcript, final: final, complete: complete, retry: true)
+    }
+
+    private func ask(_ segments: [MeetingSegment], in transcript: MeetingTranscript, final: Bool, complete: Bool, retry: Bool) async -> Bool {
+        let messages = MeetingNotesPrompt.request(
+            notes: notes, segments: segments, known: transcript.segments, final: final, complete: complete, retry: retry
         )
         do {
             let output = try await generator.generate(messages, maxTokens: MeetingNotesPrompt.maxOutputTokens)
