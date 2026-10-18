@@ -82,6 +82,9 @@ final class RulesTests: XCTestCase {
             "Bring snacks. Oh, and also drinks.",
             "Book flights for Monday and Tuesday. Oh wait, take out Tuesday.",
             "We need chairs, tables, and a projector. Forget the projector.",
+            "Add a note about the delay and one about pricing. Delete the last one.",
+            "Book a table for Friday. Forget that, make it Saturday.",
+            "Grab two coffees and a muffin, just the coffees.",
         ]
         for text in revisions {
             XCTAssertTrue(Rules.apply(text).cues.contains(.correction), text)
@@ -94,6 +97,9 @@ final class RulesTests: XCTestCase {
             "Never mind the noise in the background, the call went fine.",
             "Actually, the numbers look better than I expected.",
             "Make it quick, we only have ten minutes.",
+            "I want pizza, not wings.",
+            "Okay. Not sure yet, let me check.",
+            "Thanks for the help, just wanted to say hi.",
         ]
         for text in ordinary {
             XCTAssertFalse(Rules.apply(text).cues.contains(.correction), text)

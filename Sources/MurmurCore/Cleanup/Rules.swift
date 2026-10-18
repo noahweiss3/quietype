@@ -178,10 +178,8 @@ public enum Rules {
         (.correction, #"(?:\bor|[,;])\s+rather\b|[,.;!?]\s+(?:and\s+)?make it\b|\binstead(?=\s*[.,;!?]|\s*$)|[,;]\s+no,\s"#),
         // A false start that breaks off after an article or preposition: "Can we push the, I'd like…".
         (.correction, #"\b(?:the|a|an|to|of|for|with|my|our|your|their),\s"#),
-        // A revision aimed at something just said: "…, skip the butter", "…. Not Jordan.", "…, just
-        // marketing", "…. Oh, and drinks". It has to follow a pause, so "skip the intro" at the start
-        // or "we decided to drop it" mid-sentence don't count.
-        (.correction, #"[,.;!?]\s+(?:(?:oh|ok(?:ay)?|wait|actually|and|so|no|hmm|but|also)[,.]?\s+)*(?:drop|skip|forget|ignore|remove|delete|cut|lose|take out|take off|leave out|leave off|minus|without|except|exclude|not|just|only|and also|add)\b"#),
+        // An addition after a pause: "…. Oh, and also drinks", "…. And add oranges".
+        (.correction, #"[,.;!?]\s+(?:(?:oh|ok(?:ay)?|wait|actually|so)[,.]?\s+)*(?:and also|and add|add)\b"#),
         (.correction, #"(?:^|[,.;!?]\s*)(?:oh,? )?wait[,.!]"#),
         (.list, #"\b(first(ly)?\b.*\bsecond(ly)?|number one\b.*\bnumber two|bullet( point)?s?|numbered list|bulleted list|to-?do list|the following|next item|item one)\b"#),
         (.list, #"(^|\s)(one|1)[,.:)]\s.*\s(two|2)[,.:)]\s"#),
@@ -200,7 +198,39 @@ public enum Rules {
             }
             if counts { cues.insert(cue) }
         }
+        if retractsSomethingSaid(text) { cues.insert(.correction) }
         return cues
+    }
+
+    // A removal or narrowing after a pause: "…, skip the butter", "…. Not Jordan.", "…, just
+    // marketing". It only counts when it names something already said, so "I want pizza, not
+    // wings", "skip the intro" at the start and "we decided to drop it" stay on the fast path.
+    private static let retraction = try! NSRegularExpression(
+        pattern: #"[,.;!?]\s+(?:(?:oh|ok(?:ay)?|wait|actually|and|so|no|hmm|but|also)[,.]?\s+)*(?:drop|skip|forget|ignore|remove|delete|cut|lose|take out|take off|leave out|leave off|minus|without|except|exclude|not|just|only)\s+(?:(?:the|a|an|my|our|your)\s+)?([\p{L}\p{N}][\p{L}\p{N}'-]*)"#,
+        options: [.caseInsensitive]
+    )
+
+    /// Words that point back without repeating what they point at ("delete the last one", "forget that").
+    private static let pointers: Set<String> = [
+        "last", "first", "second", "third", "other", "one", "two", "both", "latter", "former", "rest",
+        "it", "that", "this", "those", "these", "them",
+    ]
+
+    static func retractsSomethingSaid(_ text: String) -> Bool {
+        let range = NSRange(text.startIndex..., in: text)
+        return retraction.matches(in: text, range: range).contains { match in
+            guard let whole = Range(match.range, in: text), let object = Range(match.range(at: 1), in: text) else { return false }
+            let word = stem(text[object])
+            if pointers.contains(word) { return true }
+            return Words.split(String(text[..<whole.lowerBound])).contains { stem($0.core) == word }
+        }
+    }
+
+    /// Lowercased, without a plural "s", so "eggs" matches "egg".
+    private static func stem<S: StringProtocol>(_ word: S) -> String {
+        var lowered = word.lowercased()
+        if lowered.count > 3, lowered.hasSuffix("s") { lowered.removeLast() }
+        return lowered
     }
 
     private static func hasWords(before range: NSRange, in text: String) -> Bool {

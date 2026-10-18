@@ -199,16 +199,35 @@ final class MeetingNotesTests: XCTestCase {
         XCTAssertEqual(pending, 2, "a failed update leaves the segment pending")
     }
 
-    func testFinalPassRunsEvenWithNothingNew() async {
+    func testFinalPassRereadsAShortMeetingInFull() async {
         let generator = FakeGenerator(replies: [notesA, notesB])
         let writer = MeetingNotesWriter(generator: generator)
         let transcript = MeetingTranscript(segments: [segment(0, .me, 0, 2, "Hello everyone.")])
         _ = await writer.update(with: transcript)
         let final = await writer.update(with: transcript, final: true)
         XCTAssertTrue(final)
+        let content = await generator.requests[1][1].content
+        XCTAssertTrue(content.contains("[00:00] You: Hello everyone."), "the whole transcript again")
+        XCTAssertTrue(content.contains("complete transcript"))
+        XCTAssertTrue(content.contains("- Beta timing"), "with the running notes as a draft")
+        let notes = await writer.notes
+        XCTAssertEqual(notes, notesB)
+    }
+
+    func testFinalPassOnALongMeetingOnlyTidiesTheNotes() async {
+        let long = Array(repeating: "word", count: 400).joined(separator: " ")
+        let segments = (0..<7).map { segment($0, .others, Double($0 * 60), Double($0 * 60 + 50), long) }
+        let transcript = MeetingTranscript(segments: segments)
+        XCTAssertFalse(MeetingNotesWriter.finalPassReadsEverything(transcript))
+        let generator = FakeGenerator(replies: Array(repeating: notesA, count: 5))
+        let writer = MeetingNotesWriter(generator: generator)
+        _ = await writer.update(with: transcript)
+        let final = await writer.update(with: transcript, final: true)
+        XCTAssertTrue(final)
         let requests = await generator.requests
-        XCTAssertTrue(requests[1][1].content.contains("(no new speech)"))
-        XCTAssertTrue(requests[1][1].content.contains("The meeting has ended"))
+        XCTAssertEqual(requests.count, 5, "four batches of at most 900 words, then the tidy-up")
+        XCTAssertTrue(requests[4][1].content.contains("(no new speech)"))
+        XCTAssertTrue(requests[4][1].content.contains("The meeting has ended"))
     }
 
     func testLongBacklogsAreSplitIntoBatches() {

@@ -14,8 +14,8 @@ usage:
   murmur-cli rules <text>
   murmur-cli prep    reads JSONL {"id","input","style"?,"vocabulary"?}, writes {"id","rules_text","cues","needs_llm","messages"}
   murmur-cli finish  reads JSONL {"id","input","llm_output"?,"style"?,"vocabulary"?,"mode"?,"snippets"?}, writes {"id","result"}
-  murmur-cli notes-plan    reads JSONL {"id","segments"}, writes {"id","updates":[{"at","segments","final"}]}
-  murmur-cli notes-prep    reads JSONL {"id","notes","segments","final"}, writes {"id","messages","max_tokens"}
+  murmur-cli notes-plan    reads JSONL {"id","segments"}, writes {"id","updates":[{"at","segments","final","complete"}]}
+  murmur-cli notes-prep    reads JSONL {"id","notes","segments","final","complete"?}, writes {"id","messages","max_tokens"}
   murmur-cli notes-finish  reads JSONL {"id","previous","output"}, writes {"id","notes","accepted"}
 """
 
@@ -63,6 +63,7 @@ struct NotesUpdate: Encodable {
     var at: Double
     var segments: [Int]
     var final: Bool
+    var complete = false
 }
 
 struct NotesPlanOutput: Encodable {
@@ -75,6 +76,7 @@ struct NotesPrepCase: Decodable {
     var notes: String
     var segments: [MeetingSegment]
     var final: Bool
+    var complete: Bool?
 }
 
 struct NotesPrepOutput: Encodable {
@@ -103,6 +105,10 @@ func planNotes(_ segments: [MeetingSegment], schedule: MeetingNotesSchedule = Me
     var lastUpdate = 0.0
     var updates: [NotesUpdate] = []
     func flush(at time: Double, final: Bool) {
+        if final, MeetingNotesWriter.finalPassReadsEverything(transcript) {
+            updates.append(NotesUpdate(at: time, segments: transcript.segments.map(\.id), final: true, complete: true))
+            return
+        }
         let pending = transcript.segments.filter { !covered.contains($0.id) }
         let batches = MeetingNotesWriter.batches(pending)
         for (index, batch) in batches.enumerated() {
@@ -197,7 +203,8 @@ case "notes-prep":
         emit(NotesPrepOutput(
             id: item.id,
             messages: MeetingNotesPrompt.messages(
-                notes: item.notes, newTranscript: MeetingNotesPrompt.transcriptText(item.segments), isFinal: item.final
+                notes: item.notes, newTranscript: MeetingNotesPrompt.transcriptText(item.segments),
+                isFinal: item.final, complete: item.complete ?? false
             ),
             max_tokens: MeetingNotesPrompt.maxOutputTokens
         ))

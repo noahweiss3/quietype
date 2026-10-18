@@ -38,16 +38,19 @@ def main():
         print(f"### {meeting['title']} ({len(plan['updates'])} updates)")
         for index, update in enumerate(plan["updates"]):
             batch = [segments[i] for i in update["segments"]]
-            prep = cli(["notes-prep"], [{"id": meeting["id"], "notes": notes, "segments": batch, "final": update["final"]}])[0]
+            prep = cli(["notes-prep"], [{"id": meeting["id"], "notes": notes, "segments": batch,
+                                        "final": update["final"], "complete": update.get("complete", False)}])[0]
             started = time.time()
             output, seconds, _ = chat(args.server, prep["messages"], prep["max_tokens"], no_think=False)
             done = cli(["notes-finish"], [{"id": meeting["id"], "previous": notes, "output": output}])[0]
             notes = done["notes"]
             stamp = f"{int(update['at']) // 60:02d}:{int(update['at']) % 60:02d}"
-            print(f"--- update {index + 1} at {stamp}{' (final)' if update['final'] else ''}, "
+            kind = " (final, whole transcript)" if update.get("complete") else " (final)" if update["final"] else ""
+            print(f"--- update {index + 1} at {stamp}{kind}, "
                   f"{len(batch)} new lines, {seconds:.1f}s, accepted={done['accepted']}")
             print(notes)
-            snapshots.append({"at": update["at"], "final": update["final"], "new_lines": len(batch),
+            snapshots.append({"at": update["at"], "final": update["final"], "complete": update.get("complete", False),
+                              "new_lines": len(batch),
                               "seconds": round(time.time() - started, 1), "accepted": done["accepted"],
                               "notes": notes, "raw": None if done["accepted"] else output})
         report.append({"id": meeting["id"], "title": meeting["title"], "reference": meeting.get("reference"),

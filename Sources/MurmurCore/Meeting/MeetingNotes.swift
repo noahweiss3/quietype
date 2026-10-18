@@ -39,11 +39,28 @@ public enum MeetingNotesPrompt {
     4. An action item is anyone's commitment to do something: "I'll send…", "can you update…" \
     "sure", "I'll take it to…". Record every one, from either side of the call, with who does \
     it, who it is for when that was said, and the due date if one was said.
-    5. Only write what was said. Never invent names, dates, numbers or tasks. The owner of a task \
-    is the name that was said, "You" for tasks the note-taker took on, or "Someone" if unclear.
+    5. Only write what was said. Never invent names, dates, numbers or tasks. When people name \
+    themselves or each other ("Sam here", "thanks, Dana"), use that name rather than "Others". \
+    The owner of a task is that name, "You" for tasks the note-taker took on, or "Someone".
     6. Bullets are short phrases of at most 15 words. Merge duplicates.
     7. A section with nothing in it has the single bullet "- None yet".
     8. The transcript comes from speech recognition and may have misheard words; use context.
+
+    Example. Transcript:
+    [00:10] You: Can we get the venue booked by Friday?
+    [00:15] Others: Sam here. I can book it, but only if finance approves the deposit.
+    [00:22] You: I'll ask finance today. And let's do the 12th, sorry, the 14th.
+    [00:30] Others: The 14th works for me.
+    Notes:
+    ## Summary
+    - Booking the venue for the event on the 14th
+    ## Decisions
+    - Event is on the 14th
+    ## Action items
+    - [ ] You: ask finance to approve the deposit (today)
+    - [ ] Sam: book the venue once the deposit is approved (by Friday)
+    ## Open questions
+    - Will finance approve the deposit?
     """
 
     public static let emptyNotes = """
@@ -57,9 +74,12 @@ public enum MeetingNotesPrompt {
     - None yet
     """
 
-    public static func messages(notes: String, newTranscript: String, isFinal: Bool) -> [ChatMessage] {
+    /// - Parameter complete: the transcript is the whole meeting rather than only what is new.
+    public static func messages(notes: String, newTranscript: String, isFinal: Bool, complete: Bool = false) -> [ChatMessage] {
         var content = "<notes>\n\(notes.isEmpty ? emptyNotes : notes)\n</notes>\n<transcript>\n\(newTranscript)\n</transcript>"
-        if isFinal {
+        if complete {
+            content += "\nThe meeting has ended and this is the complete transcript. Write the final notes from it. The current notes are a draft written during the meeting and may have missed or misjudged things."
+        } else if isFinal {
             content += "\nThe meeting has ended. This is the last part of the transcript; make these the final notes."
         }
         return [ChatMessage(role: "system", content: system), ChatMessage(role: "user", content: content)]
@@ -124,6 +144,14 @@ public actor MeetingNotesWriter {
     /// Longer backlogs are folded in over several requests so each prompt stays small.
     public static let maxWordsPerUpdate = 900
 
+    /// Meetings up to this long are re-read in full for the final notes, which catches what the
+    /// incremental updates missed; it still fits the notes context with room for the answer.
+    public static let fullFinalPassWords = 2_500
+
+    public static func finalPassReadsEverything(_ transcript: MeetingTranscript) -> Bool {
+        !transcript.segments.isEmpty && transcript.wordCount <= fullFinalPassWords
+    }
+
     public init(generator: TextGenerator) {
         self.generator = generator
     }
@@ -150,31 +178,40 @@ public actor MeetingNotesWriter {
     }
 
     private func run(_ transcript: MeetingTranscript, final: Bool) async -> Bool {
+        let readAll = final && Self.finalPassReadsEverything(transcript)
         let batches = Self.batches(pending(in: transcript))
-        guard !batches.isEmpty || (final && !notes.isEmpty) else { return false }
+        guard readAll || !batches.isEmpty || (final && !notes.isEmpty) else { return false }
         isUpdating = true
         defer { isUpdating = false }
 
+        if readAll { return await fold(transcript.segments, final: true, complete: true) }
         for (index, batch) in (batches.isEmpty ? [[]] : batches).enumerated() {
             let isLast = index == max(0, batches.count - 1)
-            let text = MeetingNotesPrompt.transcriptText(batch)
-            let messages = MeetingNotesPrompt.messages(notes: notes, newTranscript: text, isFinal: final && isLast)
-            do {
-                let output = try await generator.generate(messages, maxTokens: MeetingNotesPrompt.maxOutputTokens)
-                guard let cleaned = MeetingNotesPrompt.sanitize(output) else {
-                    lastError = "notes update was not in the notes format: \(output.prefix(120))"
-                    return false
-                }
-                notes = cleaned
-                covered.formUnion(batch.map(\.id))
-                updates += 1
-                lastError = nil
-            } catch {
-                lastError = "\(error)"
-                return false
-            }
+            guard await fold(batch, final: final && isLast, complete: false) else { return false }
         }
         return true
+    }
+
+    /// One request: the current notes plus `segments` in, updated notes out.
+    private func fold(_ segments: [MeetingSegment], final: Bool, complete: Bool) async -> Bool {
+        let messages = MeetingNotesPrompt.messages(
+            notes: notes, newTranscript: MeetingNotesPrompt.transcriptText(segments), isFinal: final, complete: complete
+        )
+        do {
+            let output = try await generator.generate(messages, maxTokens: MeetingNotesPrompt.maxOutputTokens)
+            guard let cleaned = MeetingNotesPrompt.sanitize(output) else {
+                lastError = "notes update was not in the notes format: \(output.prefix(120))"
+                return false
+            }
+            notes = cleaned
+            covered.formUnion(segments.map(\.id))
+            updates += 1
+            lastError = nil
+            return true
+        } catch {
+            lastError = "\(error)"
+            return false
+        }
     }
 
     /// Splits segments into consecutive batches of at most `maxWordsPerUpdate` words.
