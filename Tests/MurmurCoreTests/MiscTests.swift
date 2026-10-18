@@ -93,6 +93,22 @@ final class GuardTests: XCTestCase {
         XCTAssertEqual(OutputGuard.check(input: "Hello there. Scratch that.", output: "", cues: [.correction]), .accepted(""))
     }
 
+    func testSpokenBulletCommandsAreNotCountedAsDroppedWords() {
+        let verdict = OutputGuard.check(
+            input: "Packing bullet point tent bullet point stove bullet point rope. Actually drop the stove.",
+            output: "Packing:\n- Tent\n- Rope",
+            cues: [.correction, .list]
+        )
+        XCTAssertEqual(verdict, .accepted("Packing:\n- Tent\n- Rope"))
+    }
+
+    func testANumberedListWithAGapIsRenumbered() {
+        XCTAssertEqual(OutputGuard.sanitize("Chores:\n1. Dishes\n2. Laundry\n4. Vacuum"), "Chores:\n1. Dishes\n2. Laundry\n3. Vacuum")
+        XCTAssertEqual(OutputGuard.sanitize("1. Dishes\n2. Laundry\n3. Vacuum"), "1. Dishes\n2. Laundry\n3. Vacuum")
+        XCTAssertEqual(OutputGuard.sanitize("2. Laundry\n4. Vacuum"), "2. Laundry\n4. Vacuum")
+        XCTAssertEqual(OutputGuard.sanitize("Gate 4. Boarding at 9."), "Gate 4. Boarding at 9.")
+    }
+
     func testSanitizeStripsWrappers() {
         XCTAssertEqual(OutputGuard.sanitize("<think>\n\n</think>\n\nHello."), "Hello.")
         XCTAssertEqual(OutputGuard.sanitize("\"Hello there.\""), "Hello there.")
