@@ -97,6 +97,14 @@ jobs:
         if: matrix.suite == 'cleanup' && hashFiles('evals/corrections_holdout2.jsonl') != ''
         run: python3 evals/run_evals.py --cases evals/corrections_holdout2.jsonl --label holdout2 --print-json || true
 
+      - name: More correction cases
+        if: matrix.suite == 'cleanup' && hashFiles('evals/corrections_more.jsonl') != ''
+        run: python3 evals/run_evals.py --cases evals/corrections_more.jsonl --label more --print-json || true
+
+      - name: Third held-out set
+        if: matrix.suite == 'cleanup' && hashFiles('evals/corrections_holdout3.jsonl') != ''
+        run: python3 evals/run_evals.py --cases evals/corrections_holdout3.jsonl --label holdout3 --print-json || true
+
       - name: Snippet cases
         if: matrix.suite == 'cleanup'
         run: python3 evals/run_evals.py --cases evals/snippets.jsonl --label snippets --print-json || true

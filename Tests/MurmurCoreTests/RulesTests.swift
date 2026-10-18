@@ -118,6 +118,49 @@ final class RulesTests: XCTestCase {
         }
     }
 
+    func testTakeBacksThatSplitOrPointAtWhatWasSaid() {
+        let revisions = [
+            "Pack the cooler, the chairs and the grill. Leave the grill out.",
+            "Invite the twins, Omar and Lucia. Cross Lucia off.",
+            "Repaint the fence and the shed, strike the shed.",
+            "Order the blue rug and the lamp. Ignore what I said about the lamp.",
+            "Our goals are speed, cost and hiring. Swap hiring for retention.",
+            "We fly out on the fifth, my bad, the sixth.",
+            "Rent a van for thirty boxes, let's say forty.",
+        ]
+        for text in revisions {
+            XCTAssertTrue(Rules.apply(text).cues.contains(.correction), text)
+        }
+        let ordinary = [
+            "Take your shoes off at the door, please.",
+            "We need to strike a balance between speed and quality.",
+            "Everyone except the interns gets a bonus this year.",
+            "Swap the winter tires for summer ones in April.",
+            "My bad, I forgot to attach the file.",
+            "I took the cover off and cleaned the fan.",
+            "Forget what I said earlier, I trust your call.",
+            "The kids want pizza without onions.",
+        ]
+        for text in ordinary {
+            XCTAssertFalse(Rules.apply(text).cues.contains(.correction), text)
+        }
+    }
+
+    func testAFillerPausingACorrectionKeepsItsComma() {
+        let rephrase = Rules.apply("Hi Sam, I was going to ask if you, um, let me rephrase that. Are you free Monday?")
+        XCTAssertEqual(rephrase.text, "Hi Sam, I was going to ask if you, let me rephrase that. Are you free Monday?")
+        XCTAssertTrue(rephrase.cues.contains(.correction))
+
+        let number = Rules.apply("The table is for six people, uh, eight.")
+        XCTAssertEqual(number.text, "The table is for six people, eight.")
+        XCTAssertTrue(number.cues.contains(.correction))
+
+        // An ordinary hesitation still loses its commas and stays on the fast path.
+        let hesitation = Rules.apply("I was, um, thinking we could go.")
+        XCTAssertEqual(hesitation.text, "I was thinking we could go.")
+        XCTAssertFalse(hesitation.cues.contains(.correction))
+    }
+
     func testFallbackScratchThatDropsThePreviousSentence() {
         XCTAssertEqual(
             Rules.applyFallbackCorrections("I'll be there at noon. Scratch that. I'll be there at one."),

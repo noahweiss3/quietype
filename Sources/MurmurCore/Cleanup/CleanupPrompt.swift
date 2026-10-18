@@ -48,22 +48,26 @@ public enum CleanupPrompt {
     they said it. Carry nothing over from the abandoned start, not its words and not its form: \
     a restart said as a statement stays a statement.
     4. Speakers revise as they talk. Work out what they finally meant, output only that, and \
-    drop the correction words themselves:
-    a. "No wait", "actually", "I mean", "I meant", "sorry", "make that", "correction", "rather" or \
-    a restatement followed by a new version: the new version replaces the words it corrects, and \
+    drop the correction words themselves. One dictation can hold several revisions, each fixing \
+    a different part; apply every one of them:
+    a. "No wait", "actually", "I mean", "I meant", "sorry", "my bad", "make that", "correction", \
+    "rather", "let's say", "or better yet", "swap X for Y", a pause ("five, uh, six") or a \
+    restatement followed by a new version: the new version replaces the words it corrects, and \
     the rest of the sentence stays, including words the new version doesn't repeat ("3 pm, no, \
     4" is "4 pm"; "two kilos, I mean three" is "three kilos").
     b. When the speaker takes back one thing they already said, whatever the wording ("not the \
-    X", "skip the X", "drop X", "forget X", "scratch the X", "never mind the X", "the last one", \
-    "just A" after "A and B"…), remove that thing and the words that took it back, keep \
-    everything else, and repair the grammar of what is left. A pointer such as "the last one", \
+    X", "skip the X", "drop X", "forget X", "scratch the X", "never mind the X", "except X", \
+    "minus X", "without X", "strike X", "take X off", "leave X out", "ignore what I said about \
+    X", "the last one", "just A" after "A and B"…), remove that thing and the words that took it \
+    back, keep everything else, and repair the grammar of what is left. A pointer such as "the last one", \
     "the second one" or "that last item" means the thing at that position in what they just \
     said, and an item taken back from a spoken list leaves the list ("tents, stoves, and lanterns" \
     without stoves is "tents and lanterns"). Never turn a retraction into new text such as "not \
     X" or "no X". If that empties a sentence, drop the sentence.
     c. "Scratch that", "scrap that", "delete that", "never mind" or "I take that back" on their own \
     remove the sentence or phrase right before them. When words after them say what to remove \
-    ("scrap that, not the X", "scratch the last bit"), remove only that part.
+    ("scrap that, not the X", "scratch the last bit"), remove only that part. "Let me rephrase" \
+    or "let me start again" after an unfinished sentence removes that unfinished part.
     d. An addition ("plus X", "and X too") adds to what was said; nothing is removed.
     e. These words only revise something the speaker already said in this dictation. "I'd like \
     tea, not coffee" never asked for coffee, so it is ordinary text, as are "don't cancel that \
@@ -76,7 +80,8 @@ public enum CleanupPrompt {
     for steps or an explicit order, "- " bullets otherwise. Keep a spoken intro as its own line \
     ending in a colon.
     7. Spoken formatting commands: "new line" is a line break, "new paragraph" is a blank line. \
-    Spoken punctuation ("comma", "question mark") becomes the symbol.
+    Spoken punctuation ("comma", "question mark") becomes the symbol. Numbers keep their \
+    meaning: an oven at "four twenty-five" is 425 degrees, not 4:25.
     8. Keep the speaker's own words, tone and meaning. Do not add content, summarize, or reword \
     sentences that are already fine, and never drop anything the speaker did not take back. \
     Only fix punctuation, capitalization and obvious transcription slips.
@@ -152,6 +157,14 @@ public enum CleanupPrompt {
         (
             "Packing list bullet point passport bullet point charger bullet point sunglasses. Actually leave out the charger.",
             "Packing list:\n- Passport\n- Sunglasses"
+        ),
+        (
+            "Book the hall for sixty guests, make that seventy, and order the cake from Rossi's, actually from Bianca's.",
+            "Book the hall for seventy guests and order the cake from Bianca's."
+        ),
+        (
+            "Email the parents, the coaches and the referees about the schedule change, except the referees.",
+            "Email the parents and the coaches about the schedule change."
         ),
         (
             "We'll need ten chairs. Oh, and a whiteboard.",
