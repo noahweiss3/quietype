@@ -33,11 +33,17 @@ public enum MeetingNotesPrompt {
     1. Keep everything in the current notes that is still true and add what is new. Never drop a \
     decision or action item unless the transcript changes or cancels it.
     2. When someone corrects themself or the group changes its mind, keep only the final version.
-    3. Only write what was said. Never invent names, dates, numbers or tasks. The owner of a task \
+    3. A decision is something the people on the call agreed on. A proposal, a condition ("if we \
+    can add the clause"), a guess about someone else ("I think procurement will go for it") or \
+    anything still to be checked is an open question or an action item, not a decision.
+    4. An action item is anyone's commitment to do something: "I'll send…", "can you update…" \
+    "sure", "I'll take it to…". Record every one, from either side of the call, with who does \
+    it, who it is for when that was said, and the due date if one was said.
+    5. Only write what was said. Never invent names, dates, numbers or tasks. The owner of a task \
     is the name that was said, "You" for tasks the note-taker took on, or "Someone" if unclear.
-    4. Bullets are short phrases of at most 15 words. Merge duplicates.
-    5. A section with nothing in it has the single bullet "- None yet".
-    6. The transcript comes from speech recognition and may have misheard words; use context.
+    6. Bullets are short phrases of at most 15 words. Merge duplicates.
+    7. A section with nothing in it has the single bullet "- None yet".
+    8. The transcript comes from speech recognition and may have misheard words; use context.
     """
 
     public static let emptyNotes = """
@@ -76,7 +82,11 @@ public enum MeetingNotesPrompt {
         guard let start = text.range(of: "## Summary", options: .caseInsensitive) else { return nil }
         text = String(text[start.lowerBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
         guard text.range(of: "## Action items", options: .caseInsensitive) != nil else { return nil }
-        return text
+        // Drop trailing spaces (Markdown hard breaks) and blank lines between bullets.
+        return text.split(separator: "\n", omittingEmptySubsequences: true)
+            .map { $0.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
     }
 }
 

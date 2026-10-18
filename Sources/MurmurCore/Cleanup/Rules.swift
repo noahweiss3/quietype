@@ -27,6 +27,7 @@ public enum Rules {
     public static func apply(_ raw: String) -> RulesResult {
         var text = raw.replacingOccurrences(of: "\n", with: " ").collapsingSpaces
         text = applyStartOver(text)
+        text = dropOpeningCommand(text)
         var words = Words.split(text)
         words = removeFillers(words)
         words = collapseStutters(words)
@@ -49,6 +50,24 @@ public enum Rules {
         guard let last = startOver.matches(in: text, range: range).last,
               let end = Range(last.range, in: text)?.upperBound else { return text }
         var rest = Words.split(String(text[end...]))
+        if !rest.isEmpty { rest[0].capitalize() }
+        return Words.join(rest)
+    }
+
+    // MARK: Opening command
+
+    // "Let me rephrase." or "Scratch that." at the very start refers to something outside this
+    // dictation, so the command itself is all there is to drop.
+    private static let openingCommand = try! NSRegularExpression(
+        pattern: #"^\s*(?:(?:ok(?:ay)?|so|um+|uh+|sorry|actually|no)[,.]?\s+)*(?:let me rephrase(?: that)?|let me try (?:that )?again|let me say that again|scratch that|scrap that|strike that|delete that)[.!,:;]+\s*"#,
+        options: [.caseInsensitive]
+    )
+
+    static func dropOpeningCommand(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = openingCommand.firstMatch(in: text, range: range),
+              let command = Range(match.range, in: text) else { return text }
+        var rest = Words.split(String(text[command.upperBound...]))
         if !rest.isEmpty { rest[0].capitalize() }
         return Words.join(rest)
     }
@@ -156,7 +175,7 @@ public enum Rules {
         (.correction, #"\b(scratch that|scrap that|strike that|delete that|cancel that|undo that|take that back|never ?mind|no,? wait|wait,? no|i mean|i meant|actually|sorry|correction|better yet|make that|change that|on second thought|i misspoke|let me correct|let me rephrase|rephrase that|start over|start again|scratch|scrap)\b"#),
         // Narrower forms of words that are usually ordinary text: "…, or rather Wednesday",
         // "…, and make it 4", "…Kestrel instead.", "the parser, no, the lexer".
-        (.correction, #"(?:\bor|[,;])\s+rather\b|(?:^|[,.;!?]\s+)(?:and\s+)?make it\b|\binstead(?=\s*[.,;!?]|\s*$)|[,;]\s+no,\s"#),
+        (.correction, #"(?:\bor|[,;])\s+rather\b|[,.;!?]\s+(?:and\s+)?make it\b|\binstead(?=\s*[.,;!?]|\s*$)|[,;]\s+no,\s"#),
         // A false start that breaks off after an article or preposition: "Can we push the, I'd like…".
         (.correction, #"\b(?:the|a|an|to|of|for|with|my|our|your|their),\s"#),
         // A revision aimed at something just said: "…, skip the butter", "…. Not Jordan.", "…, just
@@ -173,10 +192,20 @@ public enum Rules {
     static func detectCues(_ text: String) -> Set<CleanupCue> {
         let range = NSRange(text.startIndex..., in: text)
         var cues: Set<CleanupCue> = []
-        for (cue, regex) in cuePatterns where regex.firstMatch(in: text, range: range) != nil {
-            cues.insert(cue)
+        for (cue, regex) in cuePatterns {
+            // A revision needs something before it to revise, so a cue that opens the dictation
+            // ("Never mind the noise, the call went fine", "Actually, it went well") doesn't count.
+            let counts = regex.matches(in: text, range: range).contains { match in
+                cue != .correction || hasWords(before: match.range, in: text)
+            }
+            if counts { cues.insert(cue) }
         }
         return cues
+    }
+
+    private static func hasWords(before range: NSRange, in text: String) -> Bool {
+        guard let lower = Range(range, in: text)?.lowerBound else { return false }
+        return text[..<lower].contains { $0.isLetter || $0.isNumber }
     }
 
     // MARK: Fallback corrections

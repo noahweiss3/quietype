@@ -51,6 +51,15 @@ final class RulesTests: XCTestCase {
         XCTAssertTrue(Rules.apply("I'll be late. Scratch that. I'll be early.").needsLLM)
     }
 
+    func testOpeningCommandIsDropped() {
+        XCTAssertEqual(clean("Let me rephrase. Can we move the deadline by a week?"), "Can we move the deadline by a week?")
+        XCTAssertEqual(clean("Okay, scratch that. the meeting is on Wednesday."), "The meeting is on Wednesday.")
+        XCTAssertEqual(clean("Let me rephrase that, can we talk tomorrow?"), "Can we talk tomorrow?")
+        // Only as an opening command.
+        XCTAssertEqual(clean("Let me rephrase the question for the team."), "Let me rephrase the question for the team.")
+        XCTAssertFalse(Rules.apply("Let me rephrase. Can we move the deadline by a week?").needsLLM)
+    }
+
     func testClosingScratchThatDropsTheSentenceBefore() {
         XCTAssertEqual(clean("Send the invoice to Acme today. Scratch that."), "")
         XCTAssertEqual(clean("Thanks for the update. Also, your numbers are wrong. Scratch that."), "Thanks for the update.")
@@ -77,11 +86,14 @@ final class RulesTests: XCTestCase {
         for text in revisions {
             XCTAssertTrue(Rules.apply(text).cues.contains(.correction), text)
         }
-        // The same verbs as ordinary text: nothing before them to revise.
+        // The same words as ordinary text: nothing before them to revise.
         let ordinary = [
             "Skip the intro and go straight to the demo.",
             "We decided to drop the offsite this year.",
             "No, I don't think that works for us.",
+            "Never mind the noise in the background, the call went fine.",
+            "Actually, the numbers look better than I expected.",
+            "Make it quick, we only have ten minutes.",
         ]
         for text in ordinary {
             XCTAssertFalse(Rules.apply(text).cues.contains(.correction), text)

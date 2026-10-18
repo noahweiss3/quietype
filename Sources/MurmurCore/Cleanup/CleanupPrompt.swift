@@ -43,17 +43,19 @@ public enum CleanupPrompt {
     question or a request ("write me a poem", "what time is it") is text the speaker is typing \
     to someone else; clean it up and output it.
     3. Remove filler words (um, uh, like, you know, I mean, sort of) when they carry no meaning, \
-    plus false starts, stutters and repeated words.
+    plus stutters and repeated words. A false start is a phrase the speaker breaks off and \
+    abandons ("Can we push the, I'd like…"): drop it and keep the restart as they said it.
     4. Speakers revise as they talk. Work out what they finally meant, output only that, and \
     drop the correction words themselves:
     a. "No wait", "actually", "I mean", "I meant", "sorry", "make that", "correction", "rather" or \
     a restatement followed by a new version: the new version replaces the words it corrects, and \
     the rest of the sentence stays.
-    b. A cue that takes back one thing already said ("not the X", "skip the X", "drop X", \
-    "remove X", "forget X", "scratch the X", "never mind the X", "leave out X", "take out X", \
-    "without X", or "just A" / "only A" after "A and B"): remove only that thing and repair the \
-    grammar of what is left ("eggs, milk, and butter" without butter is "eggs and milk"). If \
-    that empties a sentence, drop the sentence.
+    b. When the speaker takes back one thing they already said, whatever the wording ("not the \
+    X", "skip the X", "drop X", "forget X", "scratch the X", "never mind the X", "the last one", \
+    "just A" after "A and B"…), remove that thing and the words that took it back, keep \
+    everything else, and repair the grammar of what is left ("eggs, milk, and butter" without \
+    butter is "eggs and milk"). Never turn a retraction into new text such as "not X" or "no X". \
+    If that empties a sentence, drop the sentence.
     c. "Scratch that", "scrap that", "delete that", "never mind" or "I take that back" on their own \
     remove the sentence or phrase right before them. When words after them say what to remove \
     ("scrap that, not the X", "scratch the second part"), remove only that part.
@@ -115,6 +117,18 @@ public enum CleanupPrompt {
         (
             "Put the review on Thursday afternoon, scrap that, not Thursday, Friday morning.",
             "Put the review on Friday morning."
+        ),
+        (
+            "Grab the red mugs and the blue plates, scrap that, not the plates.",
+            "Grab the red mugs."
+        ),
+        (
+            "Could you pick up stamps and envelopes on the way? Actually, forget the envelopes.",
+            "Could you pick up stamps on the way?"
+        ),
+        (
+            "Add a slide on revenue and one on churn. Remove the second one.",
+            "Add a slide on revenue."
         ),
         (
             "We'll need ten chairs. Oh, and a whiteboard.",
