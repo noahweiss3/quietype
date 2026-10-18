@@ -48,6 +48,8 @@ final class MeetingController: ObservableObject {
     private var fileURL: URL?
     /// Stop was pressed while the meeting was still starting (loading the notes model can take a while).
     private var stopRequested = false
+    /// Getting the notes model while starting; Stop cancels it.
+    private var notesLoad: Task<TextGenerator?, Error>?
 
     init(transcriber: SpeechTranscriber) {
         self.transcriber = transcriber
@@ -89,10 +91,11 @@ final class MeetingController: ObservableObject {
         self.session = session
 
         // Each stream is padded by how late it started, so You and Others share one clock.
+        // Stop can be pressed at any await below; capture that hasn't started yet then never starts.
         var sources = 0
         if Permissions.microphoneDenied {
             warn("Microphone access is off, so only the call is transcribed. Turn it on in System Settings › Privacy & Security › Microphone.")
-        } else {
+        } else if !stopRequested {
             do {
                 let mic = try microphone.start()
                 await session.appendSilence(seconds: Date().timeIntervalSince(began), to: .me)
@@ -102,13 +105,15 @@ final class MeetingController: ObservableObject {
                 warn("Microphone error: \(error.localizedDescription)")
             }
         }
-        do {
-            let call = try await systemAudio.start()
-            await session.appendSilence(seconds: Date().timeIntervalSince(began), to: .others)
-            feeders.append(feed(call, into: session, as: .others))
-            sources += 1
-        } catch {
-            warn("Can't hear the call, so only your microphone is transcribed. Allow Murmur in System Settings › Privacy & Security › Screen & System Audio Recording, then quit and reopen Murmur.")
+        if !stopRequested {
+            do {
+                let call = try await systemAudio.start()
+                await session.appendSilence(seconds: Date().timeIntervalSince(began), to: .others)
+                feeders.append(feed(call, into: session, as: .others))
+                sources += 1
+            } catch {
+                warn("Can't hear the call, so only your microphone is transcribed. Allow Murmur in System Settings › Privacy & Security › Screen & System Audio Recording, then quit and reopen Murmur.")
+            }
         }
         guard sources > 0 else {
             self.session = nil
@@ -117,17 +122,23 @@ final class MeetingController: ObservableObject {
             return
         }
 
-        do {
-            if let generator = try await notesGenerator() {
-                writer = MeetingNotesWriter(generator: generator)
-            } else {
-                writer = nil
-                warn("Live notes need the cleanup model (Settings › General). The transcript still works.")
+        writer = nil
+        if !stopRequested {
+            let load = Task { try await notesGenerator() }
+            notesLoad = load
+            do {
+                if let generator = try await load.value {
+                    writer = MeetingNotesWriter(generator: generator)
+                } else {
+                    warn("Live notes need the cleanup model (Settings › General). The transcript still works.")
+                }
+            } catch {
+                if !stopRequested { warn("Live notes are off: \(error.localizedDescription). The transcript still works.") }
             }
-        } catch {
-            writer = nil
-            warn("Live notes are off: \(error.localizedDescription). The transcript still works.")
+            notesLoad = nil
         }
+        // Stopped while starting: keep what was heard before Stop, without a notes pass.
+        if stopRequested { writer = nil }
 
         lastNotesUpdate = Date()
         lastSave = Date()
@@ -145,7 +156,14 @@ final class MeetingController: ObservableObject {
     }
 
     func stop() async {
-        if state == .starting { return stopRequested = true }
+        if state == .starting {
+            // Stop listening right away; start() then finishes the meeting with what it has.
+            stopRequested = true
+            notesLoad?.cancel()
+            microphone.stop()
+            await systemAudio.stop()
+            return
+        }
         guard state == .recording else { return }
         state = .finishing
         ticker?.cancel()
@@ -212,7 +230,7 @@ final class MeetingController: ObservableObject {
     /// A stream that ends on its own while recording (sharing stopped, device unplugged) would
     /// otherwise leave one side of the meeting silently missing.
     private func streamEnded(_ speaker: MeetingSpeaker) {
-        guard state == .recording else { return }
+        guard state == .recording, !stopRequested else { return }
         warn(speaker == .me
             ? "Your microphone stopped, so the rest of the meeting only has the call's side."
             : "Call audio stopped (sharing ended or the display changed), so the rest of the meeting only has your side.")

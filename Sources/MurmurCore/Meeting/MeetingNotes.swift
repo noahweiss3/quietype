@@ -92,14 +92,16 @@ public enum MeetingNotesPrompt {
     ///   - known: everything said so far, for the names on the call.
     ///   - complete: the final pass over a whole meeting. It starts from empty notes rather than
     ///     the running ones, so a slip made early in the meeting can't survive into the final notes.
-    ///   - retry: the previous answer failed (often cut off for length), so ask for merged notes.
+    ///   - retry: the previous answer failed (often cut off for length), so ask for shorter notes
+    ///     than the regular merge does; repeating the same request would get the same answer.
     public static func request(
         notes: String, segments: [MeetingSegment], known: [MeetingSegment], final: Bool, complete: Bool, retry: Bool = false
     ) -> [ChatMessage] {
         let current = complete ? "" : notes
         return messages(
             notes: current, newTranscript: transcriptText(segments), isFinal: final, complete: complete,
-            names: names(in: known), compact: retry || MeetingTranscript.wordCount(current) > compactAfterWords
+            names: names(in: known), compact: retry || MeetingTranscript.wordCount(current) > compactAfterWords,
+            retry: retry
         )
     }
 
@@ -107,8 +109,10 @@ public enum MeetingNotesPrompt {
     ///   - complete: the transcript is the whole meeting rather than only what is new.
     ///   - names: people named on the call so far (see `names(in:)`).
     ///   - compact: ask for the notes to be merged down.
+    ///   - retry: the last answer to this request was cut off or unusable; ask for much shorter notes.
     public static func messages(
-        notes: String, newTranscript: String, isFinal: Bool, complete: Bool = false, names: [String] = [], compact: Bool = false
+        notes: String, newTranscript: String, isFinal: Bool, complete: Bool = false, names: [String] = [], compact: Bool = false,
+        retry: Bool = false
     ) -> [ChatMessage] {
         var content = "<notes>\n\(notes.isEmpty ? emptyNotes : notes)\n</notes>\n"
         if !names.isEmpty {
@@ -123,18 +127,22 @@ public enum MeetingNotesPrompt {
         if compact {
             content += "\nThe notes are getting long: merge related bullets into shorter ones, keep the Summary to at most 8 bullets and Open questions to at most 5, and keep every decision and action item that still stands."
         }
+        if retry {
+            content += "\nYour last answer to this was cut off or not in the format above. Write much shorter notes: at most 5 Summary bullets and 3 Open questions, bullets of at most 10 words, and one action item per owner with that owner's tasks combined."
+        }
         return [ChatMessage(role: "system", content: system), ChatMessage(role: "user", content: content)]
     }
 
     /// Names people used on the call: introductions on the call's side ("Priya here", "This is
     /// Marcus", "Marcus again") and people You address ("Hi Dana", "thanks, Dana", "Marcus, can
     /// you…"). A small model rarely carries these through on its own, so they're listed for it.
+    /// The patterns also catch capitalized words that start a sentence ("Same here", "Now, can
+    /// we…") and days and months ("It's Thursday"), so those are filtered out.
     public static func names(in segments: [MeetingSegment]) -> [String] {
         let name = "([A-Z][a-z]+)"
         let introductions = [
             "\\b\(name) (?:here|again)\\b",
             "\\b(?:[Tt]his is|[Ii]t's|I'm) \(name)\\b",
-            "(?:^|[.!?]\\s+)\(name)\\. (?=[A-Z])",
         ]
         let addressed = [
             "(?:^|[.!?,;]\\s+)(?:[Hh]i|[Hh]ey|[Hh]ello|[Tt]hanks|[Tt]hank you|[Bb]ye|[Mm]orning),? \(name)\\b",
@@ -160,6 +168,14 @@ public enum MeetingNotesPrompt {
         "Morning", "Okay", "Great", "Thanks", "Yes", "No", "Sure", "Fair", "Perfect", "Happy", "Hi",
         "Hello", "Hey", "Sounds", "Also", "Agreed", "Right", "Well", "So", "Good", "Nice", "Everyone",
         "All", "Team", "Guys", "Folks", "Sorry", "Cool", "Noted", "Understood", "Yeah", "Fine",
+        "Same", "Exactly", "Absolutely", "Correct", "Definitely", "Totally", "Yep", "Yup", "Nope",
+        "Alright", "Now", "Actually", "Anyway", "Honestly", "Wait", "Interesting", "Awesome",
+        "Excellent", "Next", "Then", "And", "But", "Or", "Look", "Listen", "Basically", "Oh", "Ah",
+        "Um", "Uh", "Hmm", "First", "Second", "Third", "Finally", "Lastly", "Over", "Back", "Out",
+        "Nobody", "Somebody", "Someone", "Anyone", "Everybody", "Here", "There", "Again", "Quick",
+        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Today",
+        "Tomorrow", "Tonight", "January", "February", "March", "April", "May", "June", "July",
+        "August", "September", "October", "November", "December",
     ]
 
     /// Transcript lines for the prompt.

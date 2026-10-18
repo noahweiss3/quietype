@@ -131,6 +131,7 @@ final class AppController: ObservableObject {
             try await Task.sleep(nanoseconds: 500_000_000)
             waited += 1
         }
+        try Task.checkCancellation() // the meeting was stopped while starting
         if cleaner == nil, cleanupModelDownloaded {
             let model = settings.cleanupModel
             cleanupState = .loading
@@ -149,6 +150,7 @@ final class AppController: ObservableObject {
                 throw error
             }
         }
+        try Task.checkCancellation()
         return try await cleaner?.makeGenerator()
     }
 

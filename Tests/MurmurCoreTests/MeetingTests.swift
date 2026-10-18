@@ -282,6 +282,25 @@ final class MeetingNotesTests: XCTestCase {
         XCTAssertTrue(requests[1][1].content.contains("getting long"))
     }
 
+    func testARetryOfLongNotesAsksForShorterNotesThanTheFirstTry() async {
+        let bullets = (0..<40).map { "- Topic number \($0) was discussed at some length today" }.joined(separator: "\n")
+        let longNotes = "## Summary\n\(bullets)\n## Decisions\n- None yet\n## Action items\n- None yet\n## Open questions\n- None yet"
+        let cutOff = "## Summary\n- Topic number 1\n## Decisions\n- None yet\n## Action items\n- [ ] You: write rel"
+        let generator = FakeGenerator(replies: [longNotes, cutOff, notesA])
+        let writer = MeetingNotesWriter(generator: generator)
+        var transcript = MeetingTranscript(segments: [segment(0, .me, 0, 2, "Hello everyone.")])
+        _ = await writer.update(with: transcript)
+        transcript.add(segment(1, .others, 3, 5, "Hi there."))
+        let ok = await writer.update(with: transcript)
+        XCTAssertTrue(ok)
+        let requests = await generator.requests
+        XCTAssertEqual(requests.count, 3)
+        XCTAssertTrue(requests[1][1].content.contains("getting long"))
+        XCTAssertFalse(requests[1][1].content.contains("cut off"))
+        XCTAssertTrue(requests[2][1].content.contains("cut off"))
+        XCTAssertNotEqual(requests[1][1].content, requests[2][1].content)
+    }
+
     func testLongNotesAreMergedDownOnTheNextUpdate() async {
         let bullets = (0..<40).map { "- Topic number \($0) was discussed at some length today" }.joined(separator: "\n")
         let longNotes = "## Summary\n\(bullets)\n## Decisions\n- None yet\n## Action items\n- None yet\n## Open questions\n- None yet"
@@ -355,6 +374,15 @@ final class MeetingNotesTests: XCTestCase {
             segment(4, .me, 151, 158, "Yes, let's do that. Okay, sounds good."),
         ]
         XCTAssertEqual(MeetingNotesPrompt.names(in: sync), ["Priya", "Marcus"])
+        let noNames = [
+            segment(0, .others, 0, 3, "Exactly. The renewal is forty seats."),
+            segment(1, .others, 4, 6, "Same here."),
+            segment(2, .others, 7, 9, "It's Thursday, so we can ship."),
+            segment(3, .me, 10, 12, "Alright, what's next?"),
+            segment(4, .me, 13, 15, "Now, can we talk pricing?"),
+        ]
+        XCTAssertEqual(MeetingNotesPrompt.names(in: noNames), [])
+        XCTAssertEqual(MeetingNotesPrompt.names(in: [segment(0, .others, 0, 3, "Hi, it's Dana from Acme.")]), ["Dana"])
         let content = MeetingNotesPrompt.messages(notes: "", newTranscript: "x", isFinal: false, names: ["Dana"])[1].content
         XCTAssertTrue(content.contains("People named on the call: Dana."))
     }
