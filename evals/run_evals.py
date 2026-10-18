@@ -92,7 +92,8 @@ def main():
     for case in cases:
         prep = prepped[case["id"]]
         item = {"id": case["id"], "input": case["input"], "style": case.get("style"),
-                "vocabulary": case.get("vocabulary"), "mode": "always" if args.all_llm else "smart"}
+                "vocabulary": case.get("vocabulary"), "mode": "always" if args.all_llm else "smart",
+                "snippets": case.get("snippets")}
         if prep["needs_llm"] or args.all_llm:
             words = len(prep["rules_text"].split())
             output, seconds, timings = chat(args.server, prep["messages"], words * 3 + 64, args.no_think)

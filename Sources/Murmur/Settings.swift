@@ -59,6 +59,7 @@ final class Settings: ObservableObject {
     @Published var cleanupMode: CleanupMode { didSet { defaults.set(cleanupMode.rawValue, forKey: "cleanupMode") } }
     @Published var cleanupModelID: String { didSet { defaults.set(cleanupModelID, forKey: "cleanupModelID") } }
     @Published var dictionaryText: String { didSet { defaults.set(dictionaryText, forKey: "dictionaryText") } }
+    @Published var snippets: [Snippet] { didSet { defaults.set(try? JSONEncoder().encode(snippets), forKey: "snippets") } }
     @Published var appendTrailingSpace: Bool { didSet { defaults.set(appendTrailingSpace, forKey: "appendTrailingSpace") } }
     @Published var playSounds: Bool { didSet { defaults.set(playSounds, forKey: "playSounds") } }
     @Published var speculativeDecoding: Bool { didSet { defaults.set(speculativeDecoding, forKey: "speculativeDecoding") } }
@@ -70,6 +71,7 @@ final class Settings: ObservableObject {
         cleanupMode = CleanupMode(rawValue: defaults.string(forKey: "cleanupMode") ?? "") ?? .smart
         cleanupModelID = defaults.string(forKey: "cleanupModelID") ?? CleanupModel.qwen3_4B.id
         dictionaryText = defaults.string(forKey: "dictionaryText") ?? ""
+        snippets = defaults.data(forKey: "snippets").flatMap { try? JSONDecoder().decode([Snippet].self, from: $0) } ?? []
         appendTrailingSpace = defaults.object(forKey: "appendTrailingSpace") as? Bool ?? true
         playSounds = defaults.object(forKey: "playSounds") as? Bool ?? true
         speculativeDecoding = defaults.object(forKey: "speculativeDecoding") as? Bool ?? true

@@ -13,6 +13,8 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             DictionaryTab(settings: settings)
                 .tabItem { Label("Dictionary", systemImage: "character.book.closed") }
+            SnippetsTab(settings: settings)
+                .tabItem { Label("Snippets", systemImage: "text.badge.plus") }
             HistoryTab(controller: controller)
                 .tabItem { Label("History", systemImage: "clock") }
         }
@@ -153,6 +155,64 @@ private struct DictionaryTab: View {
     }
 }
 
+private struct SnippetsTab: View {
+    @ObservedObject var settings: Settings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Say a trigger phrase and Murmur types the text instead.")
+            Text("Triggers work anywhere in a dictation and ignore case, punctuation and spacing. They match whole words, so pick phrases you won't say otherwise: “my LinkedIn link” rather than “address”.")
+                .font(.caption).foregroundStyle(.secondary)
+            List {
+                ForEach(settings.snippets) { snippet in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            TextField("Trigger, e.g. my LinkedIn", text: binding(snippet.id, \.trigger))
+                            Button {
+                                settings.snippets.removeAll { $0.id == snippet.id }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Delete snippet")
+                        }
+                        TextEditor(text: binding(snippet.id, \.text))
+                            .font(.system(.body, design: .monospaced))
+                            .frame(height: snippet.text.contains("\n") ? 72 : 36)
+                            .border(Color.secondary.opacity(0.3))
+                        if let clash = clash(for: snippet) {
+                            Text(clash).font(.caption).foregroundStyle(.orange)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            HStack {
+                Button("Add Snippet") { settings.snippets.append(Snippet(trigger: "", text: "")) }
+                Spacer()
+                Text("Expanded text is pasted exactly as written.").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Bindings by id rather than index, so deleting a row never points a field at the wrong snippet.
+    private func binding(_ id: UUID, _ field: WritableKeyPath<Snippet, String>) -> Binding<String> {
+        Binding(
+            get: { settings.snippets.first { $0.id == id }?[keyPath: field] ?? "" },
+            set: { value in
+                guard let index = settings.snippets.firstIndex(where: { $0.id == id }) else { return }
+                settings.snippets[index][keyPath: field] = value
+            }
+        )
+    }
+
+    private func clash(for snippet: Snippet) -> String? {
+        guard !snippet.key.isEmpty,
+              settings.snippets.contains(where: { $0.id != snippet.id && $0.key == snippet.key }) else { return nil }
+        return "Another snippet has the same trigger; only one of them will be used."
+    }
+}
+
 private struct HistoryTab: View {
     @ObservedObject var controller: AppController
 
@@ -193,6 +253,7 @@ private struct HistoryTab: View {
         if let llm = entry.result.llmSeconds { parts.append(String(format: "%.0f ms cleanup", llm * 1000)) }
         parts.append(String(format: "%.0f ms total", entry.totalSeconds * 1000))
         parts.append(entry.result.path.rawValue)
+        if let snippets = entry.result.snippets { parts.append("snippets: " + snippets.joined(separator: ", ")) }
         if let note = entry.result.note { parts.append(note) }
         return parts.joined(separator: " · ")
     }

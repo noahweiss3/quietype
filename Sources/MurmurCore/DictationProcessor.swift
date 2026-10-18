@@ -18,12 +18,14 @@ public struct DictationContext: Sendable {
     public var style: WritingStyle
     public var mode: CleanupMode
     public var dictionary: PersonalDictionary
+    public var snippets: Snippets
     public var appendTrailingSpace: Bool
 
-    public init(style: WritingStyle = .standard, mode: CleanupMode = .smart, dictionary: PersonalDictionary = PersonalDictionary(), appendTrailingSpace: Bool = true) {
+    public init(style: WritingStyle = .standard, mode: CleanupMode = .smart, dictionary: PersonalDictionary = PersonalDictionary(), snippets: Snippets = Snippets(), appendTrailingSpace: Bool = true) {
         self.style = style
         self.mode = mode
         self.dictionary = dictionary
+        self.snippets = snippets
         self.appendTrailingSpace = appendTrailingSpace
     }
 }
@@ -42,6 +44,8 @@ public struct ProcessedDictation: Codable, Equatable, Sendable {
     public var note: String?
     public var rulesSeconds: Double
     public var llmSeconds: Double?
+    /// Snippet triggers that were expanded.
+    public var snippets: [String]? = nil
 }
 
 /// Everything between the transcript and the text that gets pasted.
@@ -84,9 +88,14 @@ public struct DictationProcessor: Sendable {
 
         if path != .llm { text = Rules.applyFallbackCorrections(text) }
         text = context.dictionary.apply(to: text)
-        text = Self.finalize(text, style: context.style, appendTrailingSpace: context.appendTrailingSpace)
+        // Last, so neither the LLM nor the dictionary touches the stored text.
+        let expansion = context.snippets.expand(text)
+        text = Self.finalize(expansion.text, style: context.style, appendTrailingSpace: context.appendTrailingSpace)
 
-        return ProcessedDictation(raw: raw, text: text, path: path, note: note, rulesSeconds: rulesSeconds, llmSeconds: llmSeconds)
+        return ProcessedDictation(
+            raw: raw, text: text, path: path, note: note, rulesSeconds: rulesSeconds, llmSeconds: llmSeconds,
+            snippets: expansion.used.isEmpty ? nil : expansion.used
+        )
     }
 
     /// Adds a trailing space after a finished sentence so back-to-back dictations don't run together.
