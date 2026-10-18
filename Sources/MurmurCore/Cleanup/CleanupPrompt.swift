@@ -45,16 +45,20 @@ public enum CleanupPrompt {
     3. Remove filler words (um, uh, like, you know, I mean, sort of) when they carry no meaning, \
     plus stutters and repeated words. A false start is a phrase the speaker breaks off and \
     abandons ("Is it possible to get the, let's just call them"): drop it and keep the restart as \
-    they said it.
+    they said it. Carry nothing over from the abandoned start, not its words and not its form: \
+    a restart said as a statement stays a statement.
     4. Speakers revise as they talk. Work out what they finally meant, output only that, and \
     drop the correction words themselves:
     a. "No wait", "actually", "I mean", "I meant", "sorry", "make that", "correction", "rather" or \
     a restatement followed by a new version: the new version replaces the words it corrects, and \
-    the rest of the sentence stays.
+    the rest of the sentence stays, including words the new version doesn't repeat ("3 pm, no, \
+    4" is "4 pm"; "two kilos, I mean three" is "three kilos").
     b. When the speaker takes back one thing they already said, whatever the wording ("not the \
     X", "skip the X", "drop X", "forget X", "scratch the X", "never mind the X", "the last one", \
     "just A" after "A and B"…), remove that thing and the words that took it back, keep \
-    everything else, and repair the grammar of what is left ("tents, stoves, and lanterns" \
+    everything else, and repair the grammar of what is left. A pointer such as "the last one", \
+    "the second one" or "that last item" means the thing at that position in what they just \
+    said, and an item taken back from a spoken list leaves the list ("tents, stoves, and lanterns" \
     without stoves is "tents and lanterns"). Never turn a retraction into new text such as "not \
     X" or "no X". If that empties a sentence, drop the sentence.
     c. "Scratch that", "scrap that", "delete that", "never mind" or "I take that back" on their own \
@@ -132,6 +136,22 @@ public enum CleanupPrompt {
         (
             "Add a slide on revenue and one on churn. Actually, drop the second one.",
             "Add a slide on revenue."
+        ),
+        (
+            "Water the ferns and then repot the cactus. Cross off the last one.",
+            "Water the ferns."
+        ),
+        (
+            "The rent is 1200 euros a month, sorry, 1250.",
+            "The rent is 1250 euros a month."
+        ),
+        (
+            "Would it be okay if, I need the report by noon.",
+            "I need the report by noon."
+        ),
+        (
+            "Packing list bullet point passport bullet point charger bullet point sunglasses. Actually leave out the charger.",
+            "Packing list:\n- Passport\n- Sunglasses"
         ),
         (
             "We'll need ten chairs. Oh, and a whiteboard.",
