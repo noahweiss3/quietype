@@ -58,6 +58,7 @@ final class RulesTests: XCTestCase {
         // Only as an opening command.
         XCTAssertEqual(clean("Let me rephrase the question for the team."), "Let me rephrase the question for the team.")
         XCTAssertFalse(Rules.apply("Let me rephrase. Can we move the deadline by a week?").needsLLM)
+        XCTAssertEqual(clean("Scratch that."), "Scratch that.", "nothing follows, so the fallback decides")
     }
 
     func testClosingScratchThatDropsTheSentenceBefore() {
@@ -69,6 +70,12 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(clean("She said scratch that."), "She said scratch that.")
         XCTAssertEqual(clean("I want pizza and wings, scrap that."), "I want pizza and wings, scrap that.")
         XCTAssertEqual(clean("Never mind the noise, the call went fine."), "Never mind the noise, the call went fine.")
+        // On its own the command is the message.
+        XCTAssertEqual(clean("Never mind."), "Never mind.")
+        XCTAssertEqual(clean("No, forget it."), "No, forget it.")
+        // "Mr." and "p.m." don't end the sentence being taken back.
+        XCTAssertEqual(clean("I'll call Mr. Johnson later. Scratch that."), "")
+        XCTAssertEqual(clean("Thanks. Let's meet at 3 p.m. tomorrow. Never mind."), "Thanks.")
     }
 
     func testRevisionCues() {
@@ -85,6 +92,8 @@ final class RulesTests: XCTestCase {
             "Add a note about the delay and one about pricing. Delete the last one.",
             "Book a table for Friday. Forget that, make it Saturday.",
             "Grab two coffees and a muffin, just the coffees.",
+            "Bring snacks. Oh, and drinks.",
+            "The bug is in the parser. No, the lexer.",
         ]
         for text in revisions {
             XCTAssertTrue(Rules.apply(text).cues.contains(.correction), text)
@@ -100,6 +109,9 @@ final class RulesTests: XCTestCase {
             "I want pizza, not wings.",
             "Okay. Not sure yet, let me check.",
             "Thanks for the help, just wanted to say hi.",
+            "Who is this for, by the way?",
+            "Plan A, then plan B.",
+            "Did you get my email? No, not yet? Okay, I'll resend it.",
         ]
         for text in ordinary {
             XCTAssertFalse(Rules.apply(text).cues.contains(.correction), text)
@@ -124,6 +136,11 @@ final class RulesTests: XCTestCase {
 
     func testFallbackLeavesOrdinaryUseAlone() {
         XCTAssertEqual(Rules.applyFallbackCorrections("Don't scratch that table."), "Don't scratch that table.")
+        XCTAssertEqual(Rules.applyFallbackCorrections("Okay, scrap that plan."), "Okay, scrap that plan.")
+        XCTAssertEqual(
+            Rules.applyFallbackCorrections("The prototype failed. Scrap that idea, it does not work."),
+            "The prototype failed. Scrap that idea, it does not work."
+        )
     }
 
     func testWordSplitting() {

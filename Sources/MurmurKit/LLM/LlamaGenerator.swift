@@ -43,6 +43,8 @@ public final class LlamaGenerator: TextGenerator, @unchecked Sendable {
             maxTokens: maxTokens,
             speculative: speculative
         )
+        // Stopping at the limit rather than at end-of-generation means the answer is cut off.
+        guard output.count < maxTokens else { throw LlamaError.outputTruncated(maxTokens) }
         return session.detokenize(output)
     }
 }

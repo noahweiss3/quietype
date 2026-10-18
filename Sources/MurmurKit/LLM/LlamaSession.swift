@@ -11,6 +11,7 @@ public enum LlamaError: Error, CustomStringConvertible {
     case decodeFailed(Int32)
     case cacheTrimFailed
     case promptTooLong(Int)
+    case outputTruncated(Int)
 
     public var description: String {
         switch self {
@@ -21,6 +22,7 @@ public enum LlamaError: Error, CustomStringConvertible {
         case let .decodeFailed(code): return "llama_decode failed (\(code))"
         case .cacheTrimFailed: return "could not trim the KV cache"
         case let .promptTooLong(tokens): return "dictation too long for the cleanup context (\(tokens) tokens)"
+        case let .outputTruncated(tokens): return "the answer hit the \(tokens)-token limit before it finished"
         }
     }
 }

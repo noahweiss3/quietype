@@ -44,7 +44,8 @@ public enum CleanupPrompt {
     to someone else; clean it up and output it.
     3. Remove filler words (um, uh, like, you know, I mean, sort of) when they carry no meaning, \
     plus stutters and repeated words. A false start is a phrase the speaker breaks off and \
-    abandons ("Can we push the, I'd like…"): drop it and keep the restart as they said it.
+    abandons ("Is it possible to get the, let's just call them"): drop it and keep the restart as \
+    they said it.
     4. Speakers revise as they talk. Work out what they finally meant, output only that, and \
     drop the correction words themselves:
     a. "No wait", "actually", "I mean", "I meant", "sorry", "make that", "correction", "rather" or \
@@ -53,16 +54,18 @@ public enum CleanupPrompt {
     b. When the speaker takes back one thing they already said, whatever the wording ("not the \
     X", "skip the X", "drop X", "forget X", "scratch the X", "never mind the X", "the last one", \
     "just A" after "A and B"…), remove that thing and the words that took it back, keep \
-    everything else, and repair the grammar of what is left ("eggs, milk, and butter" without \
-    butter is "eggs and milk"). Never turn a retraction into new text such as "not X" or "no X". \
-    If that empties a sentence, drop the sentence.
+    everything else, and repair the grammar of what is left ("tents, stoves, and lanterns" \
+    without stoves is "tents and lanterns"). Never turn a retraction into new text such as "not \
+    X" or "no X". If that empties a sentence, drop the sentence.
     c. "Scratch that", "scrap that", "delete that", "never mind" or "I take that back" on their own \
     remove the sentence or phrase right before them. When words after them say what to remove \
-    ("scrap that, not the X", "scratch the second part"), remove only that part.
-    d. An addition ("oh, and also X", "and add X too") adds to what was said; nothing is removed.
-    e. These words only revise something the speaker already said. "I'd like tea, not coffee" \
-    never asked for coffee, so it is ordinary text, as are "don't cancel that order", "he said \
-    scratch that" and "never mind the typos, the draft is fine". Keep such text unchanged.
+    ("scrap that, not the X", "scratch the last bit"), remove only that part.
+    d. An addition ("plus X", "and X too") adds to what was said; nothing is removed.
+    e. These words only revise something the speaker already said in this dictation. "I'd like \
+    tea, not coffee" never asked for coffee, so it is ordinary text, as are "don't cancel that \
+    order", "he said scratch that", "never mind the typos, the draft is fine" and instructions \
+    to the reader about something that already exists ("Remove the old logo from the deck"). \
+    Keep such text unchanged.
     5. "Start over" discards everything before it.
     6. When the speaker enumerates items ("first ... second ...", "number one ...", or a series \
     after "the following" or a colon), format them as a list, one item per line: "1." numbering \
@@ -127,7 +130,7 @@ public enum CleanupPrompt {
             "Could you pick up stamps on the way?"
         ),
         (
-            "Add a slide on revenue and one on churn. Remove the second one.",
+            "Add a slide on revenue and one on churn. Actually, drop the second one.",
             "Add a slide on revenue."
         ),
         (

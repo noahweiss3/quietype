@@ -59,7 +59,7 @@ public enum Rules {
     // "Let me rephrase." or "Scratch that." at the very start refers to something outside this
     // dictation, so the command itself is all there is to drop.
     private static let openingCommand = try! NSRegularExpression(
-        pattern: #"^\s*(?:(?:ok(?:ay)?|so|um+|uh+|sorry|actually|no)[,.]?\s+)*(?:let me rephrase(?: that)?|let me try (?:that )?again|let me say that again|scratch that|scrap that|strike that|delete that)[.!,:;]+\s*"#,
+        pattern: #"^\s*(?:(?:ok(?:ay)?|so|um+|uh+|sorry|actually|no)[,.]?\s+)*(?:let me rephrase(?: that)?|scratch that|scrap that|strike that|delete that)[.!,:;]+\s*(?=\S)"#,
         options: [.caseInsensitive]
     )
 
@@ -76,9 +76,10 @@ public enum Rules {
 
     // "… Scratch that." as the last sentence takes back the sentence before it. Earlier in a
     // dictation the command can be followed by what to keep instead ("scratch that, not the
-    // wings"), so that is left to the LLM.
+    // wings"), so that is left to the LLM. On its own ("Never mind.", "Forget it.") it is the
+    // message, not a command.
     private static let trailingRetraction = try! NSRegularExpression(
-        pattern: #"(?:^|(?<=[.!?]))\s*(?:(?:oh|no|wait|actually|sorry|ok(?:ay)?)[,.]?\s+)*(?:scratch that|scrap that|strike that|delete that|never ?mind|i take that back|forget that|forget it)[.!]*\s*$"#,
+        pattern: #"(?<=[.!?])\s*(?:(?:oh|no|wait|actually|sorry|ok(?:ay)?)[,.]?\s+)*(?:scratch that|scrap that|strike that|delete that|never ?mind|i take that back|forget that|forget it)[.!]*\s*$"#,
         options: [.caseInsensitive]
     )
 
@@ -89,9 +90,22 @@ public enum Rules {
               let command = Range(match.range, in: text) else { return text }
         var words = Words.split(String(text[..<command.lowerBound]))
         var start = words.count
-        while start > 0, start == words.count || !words[start - 1].endsSentence { start -= 1 }
+        while start > 0, start == words.count || !endsSentence(words[start - 1]) { start -= 1 }
         words.removeSubrange(start...)
         return Words.join(words)
+    }
+
+    private static let abbreviations: Set<String> = [
+        "mr", "mrs", "ms", "dr", "prof", "st", "jr", "sr", "vs", "etc", "inc", "ltd", "co",
+        "a.m", "p.m", "e.g", "i.e", "approx", "dept", "est", "fig", "mt", "u.s",
+    ]
+
+    /// A sentence end, not the period of "Mr." or "p.m." or an initial.
+    private static func endsSentence(_ word: Word) -> Bool {
+        guard word.endsSentence else { return false }
+        if word.trailing.first == ".", abbreviations.contains(word.lower) { return false }
+        if word.trailing.first == ".", word.core.count == 1, word.isCapitalized { return false }
+        return true
     }
 
     // MARK: Fillers
@@ -176,10 +190,12 @@ public enum Rules {
         // Narrower forms of words that are usually ordinary text: "…, or rather Wednesday",
         // "…, and make it 4", "…Kestrel instead.", "the parser, no, the lexer".
         (.correction, #"(?:\bor|[,;])\s+rather\b|[,.;!?]\s+(?:and\s+)?make it\b|\binstead(?=\s*[.,;!?]|\s*$)|[,;]\s+no,\s"#),
-        // A false start that breaks off after an article or preposition: "Can we push the, I'd like…".
-        (.correction, #"\b(?:the|a|an|to|of|for|with|my|our|your|their),\s"#),
-        // An addition after a pause: "…. Oh, and also drinks", "…. And add oranges".
-        (.correction, #"[,.;!?]\s+(?:(?:oh|ok(?:ay)?|wait|actually|so)[,.]?\s+)*(?:and also|and add|add)\b"#),
+        // A false start that breaks off after "the" or a possessive: "Can we push the, I'd like…".
+        (.correction, #"\b(?:the|my|our|your|their),\s"#),
+        // An addition after a pause: "…. Oh, and also drinks", "…. And add oranges", "…. Oh, and a whiteboard".
+        (.correction, #"[,.;!?]\s+(?:(?:oh|ok(?:ay)?|wait|actually|so)[,.]?\s+)*(?:and also|and add|add)\b|[.!?]\s+oh,?\s+and\b"#),
+        // A short corrective fragment that ends the dictation: "The bug is in the parser. No, the lexer."
+        (.correction, #"[.!?]\s+no,\s+(?:\S+\s+){0,3}\S+\s*$"#),
         (.correction, #"(?:^|[,.;!?]\s*)(?:oh,? )?wait[,.!]"#),
         (.list, #"\b(first(ly)?\b.*\bsecond(ly)?|number one\b.*\bnumber two|bullet( point)?s?|numbered list|bulleted list|to-?do list|the following|next item|item one)\b"#),
         (.list, #"(^|\s)(one|1)[,.:)]\s.*\s(two|2)[,.:)]\s"#),
@@ -249,8 +265,9 @@ public enum Rules {
         var words = Words.split(text)
         var index = 0
         while index + 1 < words.count {
+            // "that" has to end the clause, so "scrap that plan" is left alone.
             let isCommand = scratchVerbs.contains(words[index].lower) && words[index + 1].lower == "that"
-                && words[index].leading.isEmpty
+                && words[index].leading.isEmpty && (!words[index + 1].trailing.isEmpty || index + 2 == words.count)
             let previous = index > 0 ? words[index - 1] : nil
             let standsAlone = previous == nil || !previous!.trailing.isEmpty
             guard isCommand, standsAlone else { index += 1; continue }

@@ -54,11 +54,12 @@ public struct MeetingTranscript: Codable, Equatable, Sendable {
         segment.text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !Self.words(segment.text).isEmpty else { return false }
 
+        let calls = segments.filter { $0.speaker == .others }
         switch segment.speaker {
         case .me:
-            if segments.contains(where: { $0.speaker == .others && Self.isEcho(mic: segment, of: $0) }) { return false }
+            if Self.isEcho(mic: segment, among: calls) { return false }
         case .others:
-            segments.removeAll { $0.speaker == .me && Self.isEcho(mic: $0, of: segment) }
+            segments.removeAll { $0.speaker == .me && Self.isEcho(mic: $0, among: calls + [segment]) }
         }
 
         let index = segments.firstIndex { $0.start > segment.start } ?? segments.endIndex
@@ -66,17 +67,40 @@ public struct MeetingTranscript: Codable, Equatable, Sendable {
         return true
     }
 
-    /// Without headphones the microphone also hears the other people, so the same words arrive
-    /// twice. A mic segment that overlaps a call segment in time and mostly repeats its words is
-    /// that echo.
-    static func isEcho(mic: MeetingSegment, of call: MeetingSegment) -> Bool {
-        let slack: TimeInterval = 1.5
-        guard mic.start < call.end + slack, call.start < mic.end + slack else { return false }
+    /// Without headphones the microphone also hears the other people, so their words arrive
+    /// twice. A mic segment is that echo when it happens at the same time as call audio (most of
+    /// it overlaps call segments, which may be cut differently) and repeats their words in the
+    /// same order. A reply that reuses a few of their words ("Thursday at three works") comes
+    /// after them, not on top of them, and is kept.
+    static func isEcho(mic: MeetingSegment, among calls: [MeetingSegment]) -> Bool {
+        let slack: TimeInterval = 0.75
+        let overlapping = calls
+            .filter { $0.start - slack < mic.end && mic.start < $0.end + slack }
+            .sorted { $0.start < $1.start }
         let micWords = words(mic.text)
-        guard !micWords.isEmpty else { return false }
-        let callWords = Set(words(call.text))
-        let repeated = micWords.filter(callWords.contains).count
+        guard !overlapping.isEmpty, micWords.count >= 3 else { return false }
+
+        let overlap = overlapping.reduce(0.0) { total, call in
+            total + max(0, min(mic.end, call.end + slack) - max(mic.start, call.start - slack))
+        }
+        guard overlap >= 0.5 * max(mic.end - mic.start, 0.1) else { return false }
+
+        let repeated = commonSubsequenceLength(micWords, overlapping.flatMap { words($0.text) })
         return Double(repeated) >= 0.6 * Double(micWords.count)
+    }
+
+    /// Length of the longest sequence of words that appears, in order, in both.
+    static func commonSubsequenceLength(_ a: [String], _ b: [String]) -> Int {
+        guard !a.isEmpty, !b.isEmpty else { return 0 }
+        var previous = [Int](repeating: 0, count: b.count + 1)
+        for word in a {
+            var current = [Int](repeating: 0, count: b.count + 1)
+            for (j, other) in b.enumerated() {
+                current[j + 1] = word == other ? previous[j] + 1 : max(previous[j + 1], current[j])
+            }
+            previous = current
+        }
+        return previous[b.count]
     }
 
     static func words(_ text: String) -> [String] {

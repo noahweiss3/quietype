@@ -51,6 +51,21 @@ final class MeetingTranscriptTests: XCTestCase {
         XCTAssertEqual(transcript.segments.count, 3)
     }
 
+    func testAQuickReplyReusingTheCallsWordsIsKept() {
+        var transcript = MeetingTranscript()
+        transcript.add(segment(0, .others, 30, 36.3, "Let's do the demo Thursday at three."))
+        XCTAssertTrue(transcript.add(segment(1, .me, 36.4, 38, "Thursday at three works.")))
+        XCTAssertEqual(transcript.segments.count, 2)
+    }
+
+    func testEchoSpanningTwoCallSegmentsIsDropped() {
+        var transcript = MeetingTranscript()
+        transcript.add(segment(0, .others, 0, 12.3, "alpha bravo charlie delta echo foxtrot golf hotel india juliet"))
+        transcript.add(segment(1, .others, 12.3, 28.3, "kilo lima mike november oscar papa quebec romeo sierra tango"))
+        XCTAssertFalse(transcript.add(segment(2, .me, 6, 24, "foxtrot golf hotel india juliet kilo lima mike november oscar")))
+        XCTAssertEqual(transcript.segments.map(\.id), [0, 1])
+    }
+
     func testTimestampsAndLines() {
         XCTAssertEqual(MeetingTranscript.timestamp(5), "00:05")
         XCTAssertEqual(MeetingTranscript.timestamp(245.9), "04:05")
@@ -78,6 +93,16 @@ final class MeetingSegmenterTests: XCTestCase {
         let cut = Double(closed[0].upperBound) / 16_000
         XCTAssertGreaterThanOrEqual(cut, 19.0)
         XCTAssertLessThanOrEqual(cut, 19.3)
+    }
+
+    func testMeetingSegmenterClosesAShortPhraseAfterALongSilence() {
+        var segmenter = SpeechSegmenter(minPause: 0.6, minSegment: 3, maxSegment: 20)
+        var closed: [Range<Int>] = []
+        for chunk in [tone(5), silence(0.7), tone(1.5), silence(3)] {
+            closed += segmenter.append(chunk)
+        }
+        XCTAssertEqual(closed.count, 2)
+        XCTAssertEqual(Double(closed[1].upperBound) / 16_000, 7.5, accuracy: 0.1, "cut in the long silence, not 18 s later")
     }
 
     func testDictationSegmenterNeverForcesACut() {
@@ -122,10 +147,20 @@ final class MeetingSessionTests: XCTestCase {
         let fake = FakeTranscriber()
         let session = MeetingSession(transcriber: fake)
         await feed(session, silence(65), from: .others)
+        let buffered = await session.bufferedSamples
+        XCTAssertLessThanOrEqual(buffered, 21 * 16_000, "silence is cut and dropped every 20 s")
         let transcript = await session.finish()
         XCTAssertTrue(transcript.segments.isEmpty)
         let calls = await fake.calls
         XCTAssertEqual(calls, 0)
+    }
+
+    func testPaddingLinesUpALateStream() async {
+        let session = MeetingSession(transcriber: FakeTranscriber())
+        await session.appendSilence(seconds: 1.5, to: .others)
+        await feed(session, tone(4), from: .others)
+        let transcript = await session.finish()
+        XCTAssertEqual(transcript.segments.first?.start ?? 0, 1.3, accuracy: 0.05)
     }
 
     func testReportsEachNewSegment() async {
@@ -240,6 +275,15 @@ final class MeetingNotesTests: XCTestCase {
         let wrapped = "<think>\nok\n</think>\nHere are the notes:\n```markdown\n\(notesA)\n```"
         XCTAssertEqual(MeetingNotesPrompt.sanitize(wrapped), notesA)
         XCTAssertNil(MeetingNotesPrompt.sanitize("## Summary\n- Only a summary"))
+    }
+
+    func testSanitizeDropsChatterAndRejectsCutOffNotes() {
+        let chatty = notesA + "  \n\nLet me know if you'd like me to adjust anything!"
+        XCTAssertEqual(MeetingNotesPrompt.sanitize(chatty), notesA)
+        let wrappedBullet = "## Summary\n- A long bullet that\n  wraps onto the next line\n## Decisions\n- None yet\n## Action items\n- None yet\n## Open questions\n- None yet"
+        XCTAssertEqual(MeetingNotesPrompt.sanitize(wrappedBullet)?.split(separator: "\n")[1], "- A long bullet that wraps onto the next line")
+        let cutOff = "## Summary\n- Beta timing\n## Decisions\n- None yet\n## Action items\n- [ ] You: write release no"
+        XCTAssertNil(MeetingNotesPrompt.sanitize(cutOff), "no Open questions section: the answer was cut off")
     }
 
     func testSchedule() {

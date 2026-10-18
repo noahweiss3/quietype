@@ -33,7 +33,10 @@ public struct Snippets: Codable, Equatable, Sendable {
         self.items = items
     }
 
-    public var isEmpty: Bool { items.allSatisfy { $0.key.isEmpty } }
+    public var isEmpty: Bool { active.isEmpty }
+
+    /// Snippets with something to match and something to type; a half-filled row does nothing.
+    var active: [Snippet] { items.filter { !$0.key.isEmpty && !$0.text.isEmpty } }
 
     public struct Expansion: Equatable, Sendable {
         public var text: String
@@ -43,7 +46,7 @@ public struct Snippets: Codable, Equatable, Sendable {
 
     public func expand(_ text: String) -> Expansion {
         // Longest trigger first, so "my work email" wins over "my work".
-        let candidates = items.filter { !$0.key.isEmpty }.sorted { $0.key.count > $1.key.count }
+        let candidates = active.sorted { $0.key.count > $1.key.count }
         guard !candidates.isEmpty else { return Expansion(text: text, used: []) }
 
         let words = Self.words(in: text)
@@ -54,7 +57,7 @@ public struct Snippets: Codable, Equatable, Sendable {
             let key = snippet.key
             var start = 0
             while start < words.count {
-                guard !claimed.contains(start), let end = Self.match(key, in: words, from: start, skipping: claimed) else {
+                guard !claimed.contains(start), let end = Self.match(key, in: words, from: start, skipping: claimed, text: text) else {
                     start += 1
                     continue
                 }
@@ -78,6 +81,10 @@ public struct Snippets: Codable, Equatable, Sendable {
             result += text[cursor..<match.range.lowerBound]
             result += match.snippet.text
             cursor = match.range.upperBound
+            // Stored text that ends a sentence ("…after 2pm.") doesn't need the transcript's period too.
+            if let last = match.snippet.text.trimmingCharacters(in: .whitespacesAndNewlines).last, ".!?…".contains(last) {
+                while cursor < text.endIndex, ".!?".contains(text[cursor]) { cursor = text.index(after: cursor) }
+            }
         }
         // "…thanks. My email signature." shouldn't leave a period under a signature block.
         let rest = text[cursor...]
@@ -122,16 +129,41 @@ public struct Snippets: Codable, Equatable, Sendable {
     }
 
     /// The index of the last word when the words starting at `start` spell out `key` exactly.
-    static func match(_ key: String, in words: [WordSpan], from start: Int, skipping claimed: Set<Int>) -> Int? {
+    /// The words may be separated only by spaces or hyphens ("my linked-in"), so a trigger never
+    /// spans a comma or sentence break ("Oh my, LinkedIn is down"), and it can't be the start or
+    /// end of a longer token such as "linkedin.com" or "my-linkedin-page".
+    static func match(_ key: String, in words: [WordSpan], from start: Int, skipping claimed: Set<Int>, text: String) -> Int? {
+        guard !isJoined(before: words[start].range.lowerBound, in: text) else { return nil }
         var spelled = ""
         var index = start
         while index < words.count, !claimed.contains(index) {
+            if index > start {
+                let gap = text[words[index - 1].range.upperBound..<words[index].range.lowerBound]
+                guard gap.allSatisfy({ $0 == " " || $0 == "-" }) else { return nil }
+            }
             spelled += words[index].key
-            if spelled == key { return index }
+            if spelled == key { return isJoined(after: words[index].range.upperBound, in: text) ? nil : index }
             guard spelled.count < key.count, key.hasPrefix(spelled) else { return nil }
             index += 1
         }
         return nil
+    }
+
+    private static let joiners: Set<Character> = ["-", ".", "@", "/", "_"]
+
+    /// True when the token goes on past `index` through a joiner, as in "linkedin.com".
+    private static func isJoined(after index: String.Index, in text: String) -> Bool {
+        guard index < text.endIndex, joiners.contains(text[index]) else { return false }
+        let next = text.index(after: index)
+        return next < text.endIndex && isWordCharacter(text[next])
+    }
+
+    /// True when the token started before `index`, as in "www.mylinkedin".
+    private static func isJoined(before index: String.Index, in text: String) -> Bool {
+        guard index > text.startIndex else { return false }
+        let previous = text.index(before: index)
+        guard joiners.contains(text[previous]), previous > text.startIndex else { return false }
+        return isWordCharacter(text[text.index(before: previous)])
     }
 
     static func normalize(_ text: String) -> String {

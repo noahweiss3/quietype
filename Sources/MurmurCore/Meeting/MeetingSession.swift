@@ -17,7 +17,10 @@ public actor MeetingSession {
 
     private let transcriber: SpeechTranscriber
     private let sampleRate: Int
-    private var channels: [MeetingSpeaker: Channel]
+    // Two stored properties rather than a dictionary, so appending mutates the buffer in place
+    // instead of copying it on every chunk.
+    private var mic: Channel
+    private var call: Channel
     private var transcript = MeetingTranscript()
     private var tail: Task<Void, Never>?
     private var nextID = 0
@@ -30,7 +33,8 @@ public actor MeetingSession {
     ) {
         self.transcriber = transcriber
         sampleRate = segmenter.sampleRate
-        channels = Dictionary(uniqueKeysWithValues: MeetingSpeaker.allCases.map { ($0, Channel(segmenter: segmenter)) })
+        mic = Channel(segmenter: segmenter)
+        call = Channel(segmenter: segmenter)
     }
 
     /// Called with the whole transcript each time a segment lands.
@@ -41,30 +45,45 @@ public actor MeetingSession {
     public var current: MeetingTranscript { transcript }
 
     public func append(_ samples: [Float], from speaker: MeetingSpeaker) {
-        guard var channel = channels[speaker] else { return }
-        channel.buffer += samples
-        let closed = channel.segmenter.append(samples)
-        for range in closed {
-            enqueue(take(range, from: &channel), speaker: speaker, range: range)
+        let closed = withChannel(speaker) { (channel: inout Channel) -> [(range: Range<Int>, audio: [Float])] in
+            channel.buffer += samples
+            return channel.segmenter.append(samples).map { range in (range, Self.take(range, from: &channel)) }
         }
-        channels[speaker] = channel
+        for segment in closed { enqueue(segment.audio, speaker: speaker, range: segment.range) }
+    }
+
+    /// Pads a stream with silence, to line its clock up with the other when it started later.
+    public func appendSilence(seconds: TimeInterval, to speaker: MeetingSpeaker) {
+        guard seconds > 0 else { return }
+        append([Float](repeating: 0, count: Int(seconds * Double(sampleRate))), from: speaker)
     }
 
     /// Transcribes what is left in both streams and returns the final transcript.
     public func finish() async -> MeetingTranscript {
         for speaker in MeetingSpeaker.allCases {
-            guard var channel = channels[speaker] else { continue }
-            let range = channel.segmenter.openSegmentStart..<channel.received
-            if !range.isEmpty { enqueue(take(range, from: &channel), speaker: speaker, range: range) }
-            channels[speaker] = channel
+            let rest = withChannel(speaker) { (channel: inout Channel) -> (range: Range<Int>, audio: [Float])? in
+                let range = channel.segmenter.openSegmentStart..<channel.received
+                return range.isEmpty ? nil : (range, Self.take(range, from: &channel))
+            }
+            if let rest { enqueue(rest.audio, speaker: speaker, range: rest.range) }
         }
         await tail?.value
         return transcript
     }
 
+    /// Audio held in memory, for tests: only the stretches still being spoken.
+    var bufferedSamples: Int { mic.buffer.count + call.buffer.count }
+
+    private func withChannel<R>(_ speaker: MeetingSpeaker, _ body: (inout Channel) -> R) -> R {
+        switch speaker {
+        case .me: return body(&mic)
+        case .others: return body(&call)
+        }
+    }
+
     /// Cuts `range` (absolute sample positions) out of the channel's buffer and drops everything
     /// before its end.
-    private func take(_ range: Range<Int>, from channel: inout Channel) -> [Float] {
+    private static func take(_ range: Range<Int>, from channel: inout Channel) -> [Float] {
         let lower = max(0, range.lowerBound - channel.bufferStart)
         let upper = min(channel.buffer.count, range.upperBound - channel.bufferStart)
         guard lower < upper else { return [] }
@@ -76,15 +95,17 @@ public actor MeetingSession {
 
     /// Segments are transcribed one at a time so the speech model is never asked for two at once.
     private func enqueue(_ audio: [Float], speaker: MeetingSpeaker, range: Range<Int>) {
-        guard let speech = SpeechSegmenter.firstSpeech(in: audio, sampleRate: sampleRate) else { return }
-        // A stretch can open with up to `maxSegment` of silence; skip it (keeping a little lead-in)
-        // so the timestamp says when talking started and the model has less to chew through.
+        guard let speech = SpeechSegmenter.firstSpeech(in: audio, sampleRate: sampleRate),
+              let speechEnd = SpeechSegmenter.lastSpeech(in: audio, sampleRate: sampleRate) else { return }
+        // A stretch can open or close with long silence; trim it (keeping a little margin) so the
+        // timestamps say when talking happened and the model has less to chew through.
         let lead = max(0, speech - sampleRate / 5)
-        let speechAudio = Array(audio[lead...])
+        let stop = min(audio.count, speechEnd + sampleRate / 5)
+        let speechAudio = Array(audio[lead..<stop])
         let id = nextID
         nextID += 1
         let start = Double(range.lowerBound + lead) / Double(sampleRate)
-        let end = Double(range.upperBound) / Double(sampleRate)
+        let end = Double(range.lowerBound + stop) / Double(sampleRate)
         let previous = tail
         tail = Task {
             await previous?.value

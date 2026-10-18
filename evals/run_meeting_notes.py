@@ -35,15 +35,18 @@ def main():
         plan = cli(["notes-plan"], [{"id": meeting["id"], "segments": meeting["segments"]}])[0]
         notes = ""
         snapshots = []
+        carried = []  # lines from a rejected answer; the app keeps them pending for the next update
         print(f"### {meeting['title']} ({len(plan['updates'])} updates)")
         for index, update in enumerate(plan["updates"]):
-            batch = [segments[i] for i in update["segments"]]
+            new = [segments[i] for i in update["segments"]]
+            batch = new if update.get("complete") else carried + new
             prep = cli(["notes-prep"], [{"id": meeting["id"], "notes": notes, "segments": batch,
                                         "final": update["final"], "complete": update.get("complete", False)}])[0]
             started = time.time()
             output, seconds, _ = chat(args.server, prep["messages"], prep["max_tokens"], no_think=False)
             done = cli(["notes-finish"], [{"id": meeting["id"], "previous": notes, "output": output}])[0]
             notes = done["notes"]
+            carried = [] if done["accepted"] or update.get("complete") else batch
             stamp = f"{int(update['at']) // 60:02d}:{int(update['at']) % 60:02d}"
             kind = " (final, whole transcript)" if update.get("complete") else " (final)" if update["final"] else ""
             print(f"--- update {index + 1} at {stamp}{kind}, "

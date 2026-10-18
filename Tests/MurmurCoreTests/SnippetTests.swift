@@ -86,6 +86,42 @@ final class SnippetTests: XCTestCase {
         XCTAssertEqual(result.snippets, ["my GitHub"])
     }
 
+    func testTriggerNeverSpansPunctuationOrPartOfALongerToken() {
+        XCTAssertEqual(expand("Oh my, LinkedIn is down again.", [linkedIn]), "Oh my, LinkedIn is down again.")
+        XCTAssertEqual(expand("Visit my linkedin.com page.", [linkedIn]), "Visit my linkedin.com page.")
+        XCTAssertEqual(expand("It's on my-linkedin-page.", [linkedIn]), "It's on my-linkedin-page.")
+        let work = Snippet(trigger: "work email", text: "jordan@acme.com")
+        XCTAssertEqual(expand("I'll finish the work. Email me tomorrow.", [work]), "I'll finish the work. Email me tomorrow.")
+    }
+
+    func testStoredSentenceDoesNotDoubleThePeriod() {
+        let availability = Snippet(trigger: "my availability", text: "I'm free Tuesdays after 2pm.")
+        XCTAssertEqual(
+            expand("Hi Sam. My availability. Talk soon.", [availability]),
+            "Hi Sam. I'm free Tuesdays after 2pm. Talk soon."
+        )
+    }
+
+    func testHalfFilledSnippetDoesNothing() {
+        let unfinished = Snippet(trigger: "my address", text: "")
+        XCTAssertEqual(expand("Ship it to my address please.", [unfinished]), "Ship it to my address please.")
+        XCTAssertTrue(Snippets([unfinished]).isEmpty)
+    }
+
+    func testCodeStylePeriodIsDecidedBeforeExpansion() async {
+        let repo = Snippet(trigger: "my repo", text: "git@github.com:jlee/murmur.git")
+        let context = DictationContext(style: .code, mode: .rulesOnly, snippets: Snippets([repo]))
+        let result = await DictationProcessor(cleaner: nil).process("git clone my repo.", context: context)
+        XCTAssertEqual(result.text, "git clone git@github.com:jlee/murmur.git")
+    }
+
+    func testWholeDictationSnippetStillGetsATrailingSpace() async {
+        let calendly = Snippet(trigger: "my calendly link", text: "https://calendly.com/jordan-lee/30min")
+        let context = DictationContext(mode: .rulesOnly, snippets: Snippets([calendly]))
+        let result = await DictationProcessor(cleaner: nil).process("My calendly link.", context: context)
+        XCTAssertEqual(result.text, "https://calendly.com/jordan-lee/30min ")
+    }
+
     func testSnippetsRoundTripAsJSON() throws {
         let snippets = Snippets([linkedIn, signature])
         let decoded = try JSONDecoder().decode(Snippets.self, from: JSONEncoder().encode(snippets))

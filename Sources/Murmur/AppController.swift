@@ -67,7 +67,12 @@ final class AppController: ObservableObject {
             Task { await self?.loadCleanupModelIfDownloaded() }
         }.store(in: &cancellables)
         settings.$speculativeDecoding.sink { [weak self] on in self?.cleaner?.speculative = on }.store(in: &cancellables)
-        meeting.notesGenerator = { [weak self] in await self?.notesGenerator() }
+        meeting.speechNotReady = { [weak self] in
+            guard let self, self.speechState != .ready else { return nil }
+            return "The speech model isn't ready yet (\(self.speechState.summary)). Try again when Settings shows it as Ready."
+        }
+        meeting.notesGenerator = { [weak self] in try await self?.notesGenerator() }
+        meeting.onFinished = { [weak self] in self?.releaseNotesModelIfUnused() }
     }
 
     func start() {
@@ -114,22 +119,45 @@ final class AppController: ObservableObject {
         }
     }
 
-    /// Meeting notes run on the cleanup model, in a context of their own. Rules-only mode doesn't
-    /// load the model for dictation, so load it here if it's on disk.
-    private func notesGenerator() async -> TextGenerator? {
-        if cleaner == nil, cleanupModelDownloaded, cleanupState != .loading {
+    /// Set when the cleanup model was loaded only for meeting notes (rules-only mode).
+    private var cleanerLoadedForNotes = false
+
+    /// Meeting notes run on the cleanup model, in a context of their own. Returns nil when the
+    /// model isn't downloaded. Rules-only mode doesn't load the model for dictation, so it is
+    /// loaded here; a load already in progress is waited for.
+    private func notesGenerator() async throws -> TextGenerator? {
+        var waited = 0
+        while cleanupState == .loading, waited < 240 { // up to two minutes
+            try await Task.sleep(nanoseconds: 500_000_000)
+            waited += 1
+        }
+        if cleaner == nil, cleanupModelDownloaded {
             let model = settings.cleanupModel
             cleanupState = .loading
             do {
                 let loaded = try await LlamaCleaner.load(model, path: ModelStore.path(for: model))
+                guard model == settings.cleanupModel else { // changed while loading
+                    cleanupState = .notLoaded
+                    return nil
+                }
                 loaded.speculative = settings.speculativeDecoding
                 cleaner = loaded
+                cleanerLoadedForNotes = settings.cleanupMode == .rulesOnly
                 cleanupState = .ready
             } catch {
                 cleanupState = .failed("\(error)")
+                throw error
             }
         }
-        return try? await cleaner?.makeGenerator()
+        return try await cleaner?.makeGenerator()
+    }
+
+    /// After a meeting in rules-only mode, drop the model that was loaded just for its notes.
+    private func releaseNotesModelIfUnused() {
+        guard cleanerLoadedForNotes, settings.cleanupMode == .rulesOnly else { return }
+        cleanerLoadedForNotes = false
+        cleaner = nil
+        cleanupState = .notLoaded
     }
 
     func downloadCleanupModel() {

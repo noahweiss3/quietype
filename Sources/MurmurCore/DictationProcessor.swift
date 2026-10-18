@@ -88,9 +88,14 @@ public struct DictationProcessor: Sendable {
 
         if path != .llm { text = Rules.applyFallbackCorrections(text) }
         text = context.dictionary.apply(to: text)
-        // Last, so neither the LLM nor the dictionary touches the stored text.
+        text = Self.finalize(text, style: context.style)
+        // Last, so neither the LLM nor the dictionary touches the stored text, and the code-style
+        // period is decided on what was said rather than on the dots inside a URL.
         let expansion = context.snippets.expand(text)
-        text = Self.finalize(expansion.text, style: context.style, appendTrailingSpace: context.appendTrailingSpace)
+        text = expansion.text
+        if context.appendTrailingSpace {
+            text = Self.appendingTrailingSpace(to: text, style: context.style, expandedSnippet: !expansion.used.isEmpty)
+        }
 
         return ProcessedDictation(
             raw: raw, text: text, path: path, note: note, rulesSeconds: rulesSeconds, llmSeconds: llmSeconds,
@@ -98,16 +103,20 @@ public struct DictationProcessor: Sendable {
         )
     }
 
-    /// Adds a trailing space after a finished sentence so back-to-back dictations don't run together.
-    static func finalize(_ text: String, style: WritingStyle, appendTrailingSpace: Bool) -> String {
+    /// Trims, and drops the period after a single phrase in a terminal or editor.
+    static func finalize(_ text: String, style: WritingStyle) -> String {
         var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if style == .code, !result.contains("\n"), result.hasSuffix("."), !result.dropLast().contains(".") {
-            result.removeLast() // a single phrase in a terminal or editor shouldn't end with a period
-        }
-        if appendTrailingSpace, !result.isEmpty, style != .code, !result.contains("\n"),
-           let last = result.last, ".!?,;:".contains(last) {
-            result += " "
+            result.removeLast()
         }
         return result
+    }
+
+    /// Adds a space after a finished sentence so back-to-back dictations don't run together. An
+    /// expanded snippet counts as finished: it may have swallowed the period ("My calendly link."
+    /// is just the URL), and the next dictation would otherwise run into it.
+    static func appendingTrailingSpace(to text: String, style: WritingStyle, expandedSnippet: Bool) -> String {
+        guard style != .code, !text.isEmpty, !text.contains("\n"), let last = text.last else { return text }
+        return expandedSnippet || ".!?,;:".contains(last) ? text + " " : text
     }
 }

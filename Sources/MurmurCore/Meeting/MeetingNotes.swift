@@ -93,20 +93,32 @@ public enum MeetingNotesPrompt {
     /// Notes are short; this leaves room for a long meeting's worth of bullets.
     public static let maxOutputTokens = 900
 
-    /// Strips wrappers small models add, and rejects output that isn't notes.
+    /// Strips wrappers small models add, and rejects output that isn't complete notes.
+    ///
+    /// Only headings and bullets are kept, so a closing "Let me know if…" never becomes part of the
+    /// notes (and never gets carried into the next update). The last section has to be there:
+    /// an answer cut off at the token limit would otherwise silently lose what came after.
     public static func sanitize(_ output: String) -> String? {
         var text = output
         if let range = text.range(of: "</think>") { text = String(text[range.upperBound...]) }
-        text = text.replacingOccurrences(of: "```markdown", with: "").replacingOccurrences(of: "```", with: "")
-        for tag in ["<notes>", "</notes>"] { text = text.replacingOccurrences(of: tag, with: "") }
         guard let start = text.range(of: "## Summary", options: .caseInsensitive) else { return nil }
-        text = String(text[start.lowerBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard text.range(of: "## Action items", options: .caseInsensitive) != nil else { return nil }
-        // Drop trailing spaces (Markdown hard breaks) and blank lines between bullets.
-        return text.split(separator: "\n", omittingEmptySubsequences: true)
-            .map { $0.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression) }
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n")
+        text = String(text[start.lowerBound...])
+
+        var lines: [String] = []
+        for raw in text.split(separator: "\n") {
+            let line = raw.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("## ") || trimmed.hasPrefix("- ") {
+                lines.append(trimmed)
+            } else if line.hasPrefix("  "), !trimmed.isEmpty, !lines.isEmpty, lines.last?.hasPrefix("- ") == true {
+                lines[lines.count - 1] += " " + trimmed // a bullet wrapped onto the next line
+            }
+        }
+        let headings = lines.filter { $0.hasPrefix("## ") }.map { $0.lowercased() }
+        for required in ["## summary", "## action items", "## open questions"] where !headings.contains(required) {
+            return nil
+        }
+        return lines.joined(separator: "\n")
     }
 }
 
