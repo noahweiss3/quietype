@@ -40,7 +40,8 @@ public enum MeetingNotesPrompt {
     "sure", "I'll take it to…". Record every one, from either side of the call, with who does \
     it, who it is for when that was said, and the due date if one was said.
     5. Only write what was said. Never invent names, dates, numbers or tasks. When people name \
-    themselves or each other ("Sam here", "thanks, Dana"), use that name rather than "Others". \
+    themselves ("Sam here") or You address them by name ("Hi Dana", "thanks, Dana"), use that \
+    name rather than "Others"; with only one other person on the call, that is who Others is. \
     The owner of a task is that name, "You" for tasks the note-taker took on, or "Someone".
     6. Bullets are short phrases of at most 15 words. Merge duplicates.
     7. A section with nothing in it has the single bullet "- None yet".
@@ -78,7 +79,7 @@ public enum MeetingNotesPrompt {
     public static func messages(notes: String, newTranscript: String, isFinal: Bool, complete: Bool = false) -> [ChatMessage] {
         var content = "<notes>\n\(notes.isEmpty ? emptyNotes : notes)\n</notes>\n<transcript>\n\(newTranscript)\n</transcript>"
         if complete {
-            content += "\nThe meeting has ended and this is the complete transcript. Write the final notes from it. The current notes are a draft written during the meeting and may have missed or misjudged things."
+            content += "\nThe meeting has ended and this is the complete transcript. Write the final notes from it. The current notes are a draft written during the meeting and may have missed or misjudged things: go through the transcript line by line and make sure every commitment anyone made is an action item, with the right owner and recipient, and that only what was agreed is under Decisions."
         } else if isFinal {
             content += "\nThe meeting has ended. This is the last part of the transcript; make these the final notes."
         }
