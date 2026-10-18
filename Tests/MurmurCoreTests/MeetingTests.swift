@@ -286,6 +286,25 @@ final class MeetingNotesTests: XCTestCase {
         XCTAssertNil(MeetingNotesPrompt.sanitize(cutOff), "no Open questions section: the answer was cut off")
     }
 
+    func testNamesFromIntroductionsAndAddress() {
+        let call = [
+            segment(0, .me, 3, 9, "Hi Dana, thanks for making time."),
+            segment(1, .others, 10, 14, "Happy to. Overall it's been good."),
+            segment(2, .me, 150, 152, "Noted, early December. Thanks Dana, talk soon."),
+        ]
+        XCTAssertEqual(MeetingNotesPrompt.names(in: call), ["Dana"])
+        let sync = [
+            segment(0, .others, 12, 20, "Morning. Priya here. Quick status first."),
+            segment(1, .others, 21, 30, "This is Marcus. Same on my side."),
+            segment(2, .me, 78, 84, "Next, onboarding emails. Marcus, where are we?"),
+            segment(3, .others, 113, 120, "Priya. Who's sending the survey results?"),
+            segment(4, .me, 151, 158, "Yes, let's do that. Okay, sounds good."),
+        ]
+        XCTAssertEqual(MeetingNotesPrompt.names(in: sync), ["Priya", "Marcus"])
+        let content = MeetingNotesPrompt.messages(notes: "", newTranscript: "x", isFinal: false, names: ["Dana"])[1].content
+        XCTAssertTrue(content.contains("People named on the call: Dana."))
+    }
+
     func testSchedule() {
         let schedule = MeetingNotesSchedule()
         XCTAssertFalse(schedule.isDue(pendingWords: 40, secondsSinceLastUpdate: 300))

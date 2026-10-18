@@ -77,6 +77,8 @@ struct NotesPrepCase: Decodable {
     var segments: [MeetingSegment]
     var final: Bool
     var complete: Bool?
+    /// Everything said so far, for the names the app passes along.
+    var known: [MeetingSegment]?
 }
 
 struct NotesPrepOutput: Encodable {
@@ -204,7 +206,8 @@ case "notes-prep":
             id: item.id,
             messages: MeetingNotesPrompt.messages(
                 notes: item.notes, newTranscript: MeetingNotesPrompt.transcriptText(item.segments),
-                isFinal: item.final, complete: item.complete ?? false
+                isFinal: item.final, complete: item.complete ?? false,
+                names: MeetingNotesPrompt.names(in: MeetingTranscript(segments: item.known ?? item.segments).segments)
             ),
             max_tokens: MeetingNotesPrompt.maxOutputTokens
         ))

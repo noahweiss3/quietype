@@ -75,9 +75,15 @@ public enum MeetingNotesPrompt {
     - None yet
     """
 
-    /// - Parameter complete: the transcript is the whole meeting rather than only what is new.
-    public static func messages(notes: String, newTranscript: String, isFinal: Bool, complete: Bool = false) -> [ChatMessage] {
-        var content = "<notes>\n\(notes.isEmpty ? emptyNotes : notes)\n</notes>\n<transcript>\n\(newTranscript)\n</transcript>"
+    /// - Parameters:
+    ///   - complete: the transcript is the whole meeting rather than only what is new.
+    ///   - names: people named on the call so far (see `names(in:)`).
+    public static func messages(notes: String, newTranscript: String, isFinal: Bool, complete: Bool = false, names: [String] = []) -> [ChatMessage] {
+        var content = "<notes>\n\(notes.isEmpty ? emptyNotes : notes)\n</notes>\n"
+        if !names.isEmpty {
+            content += "People named on the call: \(names.joined(separator: ", ")). Use these names instead of \"Others\" or \"Someone\".\n"
+        }
+        content += "<transcript>\n\(newTranscript)\n</transcript>"
         if complete {
             content += "\nThe meeting has ended and this is the complete transcript. Write the final notes from it. The current notes are a draft written during the meeting and may have missed or misjudged things: go through the transcript line by line and make sure every commitment anyone made is an action item, with the right owner and recipient, and that only what was agreed is under Decisions."
         } else if isFinal {
@@ -85,6 +91,42 @@ public enum MeetingNotesPrompt {
         }
         return [ChatMessage(role: "system", content: system), ChatMessage(role: "user", content: content)]
     }
+
+    /// Names people used on the call: introductions on the call's side ("Priya here", "This is
+    /// Marcus", "Marcus again") and people You address ("Hi Dana", "thanks, Dana", "Marcus, can
+    /// you…"). A small model rarely carries these through on its own, so they're listed for it.
+    public static func names(in segments: [MeetingSegment]) -> [String] {
+        let name = "([A-Z][a-z]+)"
+        let introductions = [
+            "\\b\(name) (?:here|again)\\b",
+            "\\b(?:[Tt]his is|[Ii]t's|I'm) \(name)\\b",
+            "(?:^|[.!?]\\s+)\(name)\\. (?=[A-Z])",
+        ]
+        let addressed = [
+            "(?:^|[.!?,;]\\s+)(?:[Hh]i|[Hh]ey|[Hh]ello|[Tt]hanks|[Tt]hank you|[Bb]ye|[Mm]orning),? \(name)\\b",
+            "(?:^|[.!?]\\s+)\(name), (?:can|could|would|will|where|what|how|do|did|are|is)\\b",
+        ]
+        var found: [String] = []
+        for segment in segments {
+            for pattern in segment.speaker == .others ? introductions : addressed {
+                guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+                let text = segment.text
+                for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                    guard let range = Range(match.range(at: 1), in: text) else { continue }
+                    let candidate = String(text[range])
+                    if !notNames.contains(candidate), !found.contains(candidate) { found.append(candidate) }
+                }
+            }
+        }
+        return found
+    }
+
+    /// Capitalized words those patterns can catch that aren't names.
+    private static let notNames: Set<String> = [
+        "Morning", "Okay", "Great", "Thanks", "Yes", "No", "Sure", "Fair", "Perfect", "Happy", "Hi",
+        "Hello", "Hey", "Sounds", "Also", "Agreed", "Right", "Well", "So", "Good", "Nice", "Everyone",
+        "All", "Team", "Guys", "Folks", "Sorry", "Cool", "Noted", "Understood", "Yeah", "Fine",
+    ]
 
     /// Transcript lines for the prompt.
     public static func transcriptText(_ segments: [MeetingSegment]) -> String {
@@ -197,18 +239,19 @@ public actor MeetingNotesWriter {
         isUpdating = true
         defer { isUpdating = false }
 
-        if readAll { return await fold(transcript.segments, final: true, complete: true) }
+        if readAll { return await fold(transcript.segments, in: transcript, final: true, complete: true) }
         for (index, batch) in (batches.isEmpty ? [[]] : batches).enumerated() {
             let isLast = index == max(0, batches.count - 1)
-            guard await fold(batch, final: final && isLast, complete: false) else { return false }
+            guard await fold(batch, in: transcript, final: final && isLast, complete: false) else { return false }
         }
         return true
     }
 
     /// One request: the current notes plus `segments` in, updated notes out.
-    private func fold(_ segments: [MeetingSegment], final: Bool, complete: Bool) async -> Bool {
+    private func fold(_ segments: [MeetingSegment], in transcript: MeetingTranscript, final: Bool, complete: Bool) async -> Bool {
         let messages = MeetingNotesPrompt.messages(
-            notes: notes, newTranscript: MeetingNotesPrompt.transcriptText(segments), isFinal: final, complete: complete
+            notes: notes, newTranscript: MeetingNotesPrompt.transcriptText(segments), isFinal: final, complete: complete,
+            names: MeetingNotesPrompt.names(in: transcript.segments)
         )
         do {
             let output = try await generator.generate(messages, maxTokens: MeetingNotesPrompt.maxOutputTokens)

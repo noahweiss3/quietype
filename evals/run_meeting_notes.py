@@ -40,7 +40,8 @@ def main():
         for index, update in enumerate(plan["updates"]):
             new = [segments[i] for i in update["segments"]]
             batch = new if update.get("complete") else carried + new
-            prep = cli(["notes-prep"], [{"id": meeting["id"], "notes": notes, "segments": batch,
+            known = [s for s in meeting["segments"] if s["end"] <= update["at"]]
+            prep = cli(["notes-prep"], [{"id": meeting["id"], "notes": notes, "segments": batch, "known": known,
                                         "final": update["final"], "complete": update.get("complete", False)}])[0]
             started = time.time()
             output, seconds, _ = chat(args.server, prep["messages"], prep["max_tokens"], no_think=False)
