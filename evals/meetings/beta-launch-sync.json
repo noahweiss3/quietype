@@ -1,0 +1,218 @@
+{
+ "id": "beta-launch-sync",
+ "title": "Beta launch sync",
+ "segments": [
+  {
+   "id": 0,
+   "speaker": "me",
+   "start": 3.0,
+   "end": 11.5,
+   "text": "Morning everyone. Let's get going, we have thirty minutes and three things: the beta date, the onboarding emails, and the pricing page."
+  },
+  {
+   "id": 1,
+   "speaker": "others",
+   "start": 12.5,
+   "end": 20.2,
+   "text": "Morning. Priya here. Quick status first, the build is green and QA signed off on the core flows yesterday afternoon."
+  },
+  {
+   "id": 2,
+   "speaker": "others",
+   "start": 21.0,
+   "end": 30.2,
+   "text": "This is Marcus. Same on my side, the analytics events are all wired up, so we'll actually see where people drop off this time."
+  },
+  {
+   "id": 3,
+   "speaker": "me",
+   "start": 31.4,
+   "end": 36.0,
+   "text": "Great. So the beta date. I was thinking we ship next Tuesday."
+  },
+  {
+   "id": 4,
+   "speaker": "others",
+   "start": 36.6,
+   "end": 43.9,
+   "text": "Tuesday is tight for me. The release notes and the help center articles won't be done until Wednesday night."
+  },
+  {
+   "id": 5,
+   "speaker": "others",
+   "start": 44.6,
+   "end": 53.1,
+   "text": "Marcus again. Also Tuesday is the day the sales team has their offsite, so nobody would be around to answer customer questions."
+  },
+  {
+   "id": 6,
+   "speaker": "me",
+   "start": 54.0,
+   "end": 59.0,
+   "text": "Okay, that settles it. Let's ship on Thursday instead. Thursday morning, Pacific time."
+  },
+  {
+   "id": 7,
+   "speaker": "others",
+   "start": 59.6,
+   "end": 65.7,
+   "text": "Thursday works. I'll have the release notes and help articles done by Wednesday end of day."
+  },
+  {
+   "id": 8,
+   "speaker": "me",
+   "start": 66.7,
+   "end": 71.0,
+   "text": "Perfect. How many people are in the beta list right now?"
+  },
+  {
+   "id": 9,
+   "speaker": "others",
+   "start": 71.5,
+   "end": 77.6,
+   "text": "We have forty, sorry, forty-five companies signed up, and about three hundred individual users across them."
+  },
+  {
+   "id": 10,
+   "speaker": "me",
+   "start": 78.6,
+   "end": 83.6,
+   "text": "Nice, that's more than I expected. Next, onboarding emails. Marcus, where are we?"
+  },
+  {
+   "id": 11,
+   "speaker": "others",
+   "start": 84.2,
+   "end": 94.2,
+   "text": "I drafted the three-email sequence. Welcome, a day-three tips email, and a day-seven feedback survey. I want to cut the day-three one, honestly, it's just noise."
+  },
+  {
+   "id": 12,
+   "speaker": "me",
+   "start": 95.0,
+   "end": 103.5,
+   "text": "I'd keep it, but make it shorter. Tips are where people find the import feature, and that's our best predictor of retention."
+  },
+  {
+   "id": 13,
+   "speaker": "others",
+   "start": 104.2,
+   "end": 111.9,
+   "text": "Fair. Okay, I'll keep it and cut it down to three tips. I'll send the drafts to you by Monday."
+  },
+  {
+   "id": 14,
+   "speaker": "others",
+   "start": 113.0,
+   "end": 119.5,
+   "text": "Priya. Who's sending the survey results to the design team? Last beta that fell through the cracks."
+  },
+  {
+   "id": 15,
+   "speaker": "me",
+   "start": 120.1,
+   "end": 125.5,
+   "text": "I'll own that. I'll share a summary with design every Friday during the beta."
+  },
+  {
+   "id": 16,
+   "speaker": "me",
+   "start": 126.5,
+   "end": 131.9,
+   "text": "Last thing, the pricing page. Do we show prices during the beta or not?"
+  },
+  {
+   "id": 17,
+   "speaker": "others",
+   "start": 132.6,
+   "end": 141.0,
+   "text": "Marcus. I'd say no prices yet. We haven't decided between per-seat and usage-based, and showing a number we change later burns trust."
+  },
+  {
+   "id": 18,
+   "speaker": "others",
+   "start": 141.8,
+   "end": 150.3,
+   "text": "Priya. Agreed, but we need some answer when people ask. Can we say free during the beta and pricing announced at launch?"
+  },
+  {
+   "id": 19,
+   "speaker": "me",
+   "start": 151.0,
+   "end": 158.3,
+   "text": "Yes, let's do that. Free during the beta, pricing announced at launch. Marcus, can you update the page copy?"
+  },
+  {
+   "id": 20,
+   "speaker": "others",
+   "start": 158.9,
+   "end": 163.9,
+   "text": "Sure, I'll update it by Wednesday so it goes out with the beta."
+  },
+  {
+   "id": 21,
+   "speaker": "others",
+   "start": 164.9,
+   "end": 173.4,
+   "text": "One open question from me. Do we need legal to review the beta terms again since we changed the data retention policy?"
+  },
+  {
+   "id": 22,
+   "speaker": "me",
+   "start": 174.1,
+   "end": 181.8,
+   "text": "Good question, I honestly don't know. Let's not block on it today. I'll ask legal and we'll decide on Monday."
+  },
+  {
+   "id": 23,
+   "speaker": "others",
+   "start": 182.8,
+   "end": 188.5,
+   "text": "Also, are we doing a launch post on the blog, or waiting for general availability?"
+  },
+  {
+   "id": 24,
+   "speaker": "me",
+   "start": 189.1,
+   "end": 193.4,
+   "text": "Let's park that. It depends on how the first week goes."
+  },
+  {
+   "id": 25,
+   "speaker": "me",
+   "start": 194.4,
+   "end": 210.5,
+   "text": "Okay, recap. Beta ships Thursday morning. Priya does release notes and help articles by Wednesday. Marcus does the shorter email sequence by Monday and the pricing copy by Wednesday. I'll talk to legal and send design the weekly survey summary. Thanks everyone."
+  },
+  {
+   "id": 26,
+   "speaker": "others",
+   "start": 211.0,
+   "end": 213.0,
+   "text": "Thanks, bye."
+  }
+ ],
+ "reference": {
+  "decisions": [
+   "Beta ships Thursday morning Pacific (moved from Tuesday)",
+   "Keep the day-three tips email but shorten it to three tips",
+   "Pricing page says free during the beta, pricing announced at launch"
+  ],
+  "action_items": [
+   "Priya: release notes + help center articles by Wednesday end of day",
+   "Marcus: onboarding email drafts (shortened) to You by Monday",
+   "Marcus: update pricing page copy by Wednesday",
+   "You: weekly Friday survey summary to design",
+   "You: ask legal about beta terms; decide Monday"
+  ],
+  "open_questions": [
+   "Does legal need to re-review beta terms after the data retention change?",
+   "Blog launch post now or at GA? (parked)"
+  ],
+  "facts": [
+   "45 companies (not 40), ~300 users",
+   "Build green, QA signed off",
+   "Tuesday rejected: docs not ready and sales offsite"
+  ]
+ }
+}

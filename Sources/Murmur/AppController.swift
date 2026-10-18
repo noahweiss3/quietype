@@ -17,6 +17,7 @@ final class AppController: ObservableObject {
 
     let settings: Settings
     let hud = RecordingHUD()
+    let meeting: MeetingController
 
     @Published private(set) var speechState: ModelState = .notLoaded
     @Published private(set) var cleanupState: ModelState = .notLoaded
@@ -24,7 +25,7 @@ final class AppController: ObservableObject {
     @Published private(set) var isRecording = false
     @Published private(set) var accessibilityGranted = Permissions.accessibilityGranted
 
-    private let transcriber = ParakeetTranscriber()
+    private let transcriber: ParakeetTranscriber
     private var cleaner: LlamaCleaner?
     private let hotkey: HotkeyMonitor
     private let recorder = AudioRecorder()
@@ -40,6 +41,9 @@ final class AppController: ObservableObject {
 
     init(settings: Settings) {
         self.settings = settings
+        let transcriber = ParakeetTranscriber()
+        self.transcriber = transcriber
+        meeting = MeetingController(transcriber: transcriber)
         hotkey = HotkeyMonitor(key: settings.dictationKey)
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         historyStore = HistoryStore(url: support.appendingPathComponent("Murmur/history.json"))
@@ -63,6 +67,7 @@ final class AppController: ObservableObject {
             Task { await self?.loadCleanupModelIfDownloaded() }
         }.store(in: &cancellables)
         settings.$speculativeDecoding.sink { [weak self] on in self?.cleaner?.speculative = on }.store(in: &cancellables)
+        meeting.notesGenerator = { [weak self] in await self?.notesGenerator() }
     }
 
     func start() {
@@ -109,6 +114,24 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// Meeting notes run on the cleanup model, in a context of their own. Rules-only mode doesn't
+    /// load the model for dictation, so load it here if it's on disk.
+    private func notesGenerator() async -> TextGenerator? {
+        if cleaner == nil, cleanupModelDownloaded, cleanupState != .loading {
+            let model = settings.cleanupModel
+            cleanupState = .loading
+            do {
+                let loaded = try await LlamaCleaner.load(model, path: ModelStore.path(for: model))
+                loaded.speculative = settings.speculativeDecoding
+                cleaner = loaded
+                cleanupState = .ready
+            } catch {
+                cleanupState = .failed("\(error)")
+            }
+        }
+        return try? await cleaner?.makeGenerator()
+    }
+
     func downloadCleanupModel() {
         let model = settings.cleanupModel
         cleanupState = .downloading(0)
@@ -153,6 +176,10 @@ final class AppController: ObservableObject {
 
     private func startRecording() {
         guard dictationTask == nil else { return hotkey.reset() } // still pasting the previous one
+        guard !meeting.isActive else {
+            hotkey.reset()
+            return hud.flash("Meeting notes are recording")
+        }
         guard speechState == .ready else {
             hotkey.reset()
             return hud.flash(speechState == .loading || speechState.isDownloading ? "Speech model is loading…" : "Speech model not ready")
@@ -207,6 +234,7 @@ final class AppController: ObservableObject {
             style: AppStyles.style(forBundleID: targetBundleID),
             mode: settings.cleanupMode,
             dictionary: settings.dictionary,
+            snippets: Snippets(settings.snippets),
             appendTrailingSpace: settings.appendTrailingSpace
         )
         let processor = DictationProcessor(cleaner: settings.cleanupMode == .rulesOnly ? nil : cleaner)

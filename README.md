@@ -3,7 +3,9 @@
 Fast dictation for macOS that runs entirely on your Mac. Hold a key, talk, let go, and cleaned-up text appears wherever your cursor is.
 
 - **Transcription:** NVIDIA Parakeet on the Neural Engine (via [FluidAudio](https://github.com/FluidInference/FluidAudio))
-- **Cleanup:** a local LLM (Qwen3 4B Instruct via [llama.cpp](https://github.com/ggml-org/llama.cpp)) that removes fillers, applies "scratch that" / "no wait" / "start over", and formats lists
+- **Cleanup:** a local LLM (Qwen3 4B Instruct via [llama.cpp](https://github.com/ggml-org/llama.cpp)) that removes fillers, applies "scratch that" / "no wait" / "not the wings" / "start over", and formats lists
+- **Snippets:** say "my LinkedIn" and your profile URL is typed instead
+- **Meeting notes:** transcribes your mic and the call's audio live, and keeps notes (summary, decisions, action items) up to date as you talk
 - **Private:** no audio or text leaves the machine. The only network access is the one-time model downloads.
 
 ## How it works
@@ -64,12 +66,19 @@ Things you can say:
 
 - "Let's meet at 3, **no wait**, 4" → *Let's meet at 4*
 - "The meeting is Monday. **Scratch that.** The meeting is Wednesday." → *The meeting is Wednesday.*
+- "I want pizza and wings, **scrap that, not the wings**" → *I want pizza.*
+- "Add eggs, milk, and butter. **Wait, skip the butter.**" → *Add eggs and milk.*
+- "I'd like the soup, not the salad" → left alone: nothing was taken back
 - "…**start over.** Hi Sarah, quick question" → *Hi Sarah, quick question*
 - "We need **first** eggs, **second** milk, **third** bread" → a numbered list
 - "Hi Alex **new paragraph** thanks for…" → a paragraph break
 - "Are we still on **question mark**" → *Are we still on?*
 
 Text is styled for the app you're in: casual in Slack and Messages, full sentences in Mail, and in editors and terminals identifiers are kept exactly with no trailing period.
+
+**Snippets.** Add a trigger and its text in Settings › Snippets, e.g. `my LinkedIn` → `https://www.linkedin.com/in/you`. Say the trigger anywhere in a dictation ("here's my LinkedIn if you want to connect") and the text is pasted exactly as written. Matching ignores case, punctuation and spacing ("my linked in" works) and only matches whole words. Expansion happens after cleanup, so "send them my LinkedIn, no wait, my GitHub" expands only GitHub. A dictation that is just the trigger ("my email signature") becomes exactly the stored text.
+
+**Meeting notes.** Choose *Start Meeting Notes* from the menu bar. Murmur records your microphone (labelled *You*) and the Mac's audio output (*Others*, via ScreenCaptureKit, which asks for Screen & System Audio Recording permission). No bot joins the call. Both are transcribed while the meeting runs, and about once a minute the local LLM folds the new talk into the notes: summary, decisions, action items with owners, and open questions. When someone changes their mind, the notes keep the final version. *Stop* writes a final version and saves notes plus the timestamped transcript as Markdown in `~/Library/Application Support/Murmur/Meetings`. Without headphones the mic also hears the call, so mic segments that repeat what just came through the speakers are dropped. Dictation is paused while a meeting is recording. Everything stays on the Mac.
 
 **Settings**
 - **Cleanup mode:** *Smart* (default) uses the LLM only when needed. *Always* runs it on everything. *Rules only* never uses it.
@@ -91,14 +100,18 @@ This prints transcription time, LLM prefill and generation time per case, and wi
 
 ## Cleanup quality
 
-`evals/cases.jsonl` has 35 cases covering fillers, corrections, start-over, lists, formatting commands, prompt injection ("write me a poem", "ignore all previous instructions"), per-app style and vocabulary. `evals/run_evals.py` runs them through the app's own Swift code (`murmur-cli`) against any llama.cpp server:
+`evals/cases.jsonl` has 35 cases covering fillers, corrections, start-over, lists, formatting commands, prompt injection ("write me a poem", "ignore all previous instructions"), per-app style and vocabulary. `evals/corrections.jsonl` has 46 self-revision cases ("x and y, scrap that, not y", replacements, additions, chained revisions, and look-alikes that must be left alone). `evals/corrections_holdout.jsonl` has 16 more written independently and never used for tuning, and `evals/snippets.jsonl` covers snippet expansion through the whole pipeline. `evals/run_evals.py` runs them through the app's own Swift code (`murmur-cli`) against any llama.cpp server:
 
 ```sh
 llama-server -m Qwen3-4B-Instruct-2507-Q4_K_M.gguf --jinja -c 4096 --port 8080
 swift build --product murmur-cli
 python3 evals/run_evals.py            # smart mode, as the app runs
 python3 evals/run_evals.py --all-llm  # force every case through the LLM
+python3 evals/run_evals.py --cases evals/corrections.jsonl
+python3 evals/run_meeting_notes.py    # replays evals/meetings/*.json and prints each notes update
 ```
+
+The *Cleanup evals* workflow runs all of this on a Linux runner (llama.cpp on the CPU) for pushes to `main`, or by hand.
 
 | Model | Smart mode | Notes |
 |---|---|---|
@@ -110,7 +123,8 @@ python3 evals/run_evals.py --all-llm  # force every case through the LLM
 ```
 Sources/MurmurCore     portable logic, tested on Linux and macOS:
                        rules pass, cue detection, prompt, output guard, speculative
-                       decoder, hotkey state machine, pause segmenter, live transcription
+                       decoder, hotkey state machine, pause segmenter, live transcription,
+                       snippets, meeting transcript and live notes
 Sources/MurmurKit      macOS: llama.cpp runner, Parakeet transcriber, model downloads
 Sources/Murmur         the menu bar app (AppKit + SwiftUI)
 Sources/murmur-bench   headless pipeline for latency numbers and CI
@@ -127,6 +141,7 @@ MURMUR_TEST_MODEL=/path/to/model.gguf swift test --filter MurmurKitTests
 ## CI
 
 - **CI** (every push): core tests on Linux.
+- **Cleanup evals** (pushes to `main` that touch the core or evals, or by hand): core tests, then the cleanup, correction, snippet and meeting-notes evals against Qwen3 4B on llama.cpp's CPU server.
 - **macOS** (pushes that touch Mac code): builds and bundles `Murmur.app`. Start it by hand (*Actions › macOS › Run workflow*) to also run Parakeet and the cleanup LLM end to end on synthesized speech. That takes about 20 minutes on a runner, and macOS minutes bill at 10x on private repos, so it isn't automatic.
 
 ## Troubleshooting

@@ -27,9 +27,13 @@ jobs:
       - run: swift test
 
   evals:
-    name: Evals (Qwen3 4B, llama.cpp CPU)
+    name: Evals ${{ matrix.suite }} (Qwen3 4B, llama.cpp CPU)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [cleanup, notes]
     env:
       # Same model and llama.cpp release the app uses.
       MODEL_URL: https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
@@ -70,7 +74,7 @@ jobs:
       - name: Start llama-server
         run: |
           nproc
-          .llama/llama-server -m "$MODEL" --jinja -c 4096 -np 1 -t "$(nproc)" --port 8080 > "$RUNNER_TEMP/server.log" 2>&1 &
+          .llama/llama-server -m "$MODEL" --jinja -c 8192 -np 1 -t "$(nproc)" --port 8080 > "$RUNNER_TEMP/server.log" 2>&1 &
           for i in $(seq 1 120); do
             curl -sf http://127.0.0.1:8080/health && break
             sleep 2
@@ -78,17 +82,27 @@ jobs:
           curl -sf http://127.0.0.1:8080/health || (cat "$RUNNER_TEMP/server.log"; exit 1)
 
       - name: Existing cases (smart mode)
+        if: matrix.suite == 'cleanup'
         run: python3 evals/run_evals.py --label cases --print-json || true
 
       - name: Correction cases
+        if: matrix.suite == 'cleanup'
         run: python3 evals/run_evals.py --cases evals/corrections.jsonl --label corrections --print-json || true
 
       - name: Held-out correction cases
-        if: hashFiles('evals/corrections_holdout.jsonl') != ''
+        if: matrix.suite == 'cleanup' && hashFiles('evals/corrections_holdout.jsonl') != ''
         run: python3 evals/run_evals.py --cases evals/corrections_holdout.jsonl --label holdout --print-json || true
+
+      - name: Snippet cases
+        if: matrix.suite == 'cleanup'
+        run: python3 evals/run_evals.py --cases evals/snippets.jsonl --label snippets --print-json || true
+
+      - name: Live meeting notes
+        if: matrix.suite == 'notes'
+        run: python3 evals/run_meeting_notes.py --print-json || true
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: eval-results
+          name: eval-results-${{ matrix.suite }}
           path: evals/results/
