@@ -86,7 +86,8 @@ def main():
         cases = [c for c in cases if c["id"] in wanted]
 
     prepped = {p["id"]: p for p in cli(["prep"], [
-        {"id": c["id"], "input": c["input"], "style": c.get("style"), "vocabulary": c.get("vocabulary")} for c in cases])}
+        {"id": c["id"], "input": c["input"], "style": c.get("style"), "vocabulary": c.get("vocabulary"),
+         "snippets": c.get("snippets")} for c in cases])}
 
     finish_inputs, llm_times, llm_tokens, llm_outputs = [], [], [], {}
     for case in cases:

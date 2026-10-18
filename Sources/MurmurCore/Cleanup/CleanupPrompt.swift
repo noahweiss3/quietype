@@ -12,7 +12,7 @@ public enum WritingStyle: String, Codable, Sendable, CaseIterable {
         case .standard: return nil
         case .chat: return "a chat message. Keep the casual tone."
         case .email: return "an email. Use complete sentences and paragraphs."
-        case .code: return "a code editor or terminal. Keep technical terms, identifiers and casing exactly as spoken."
+        case .code: return "a code editor or terminal. Keep technical terms, identifiers and casing exactly as spoken; spoken corrections still apply."
         }
     }
 }
@@ -67,13 +67,14 @@ public enum CleanupPrompt {
     c. "Scratch that", "scrap that", "delete that", "never mind" or "I take that back" on their own \
     remove the sentence or phrase right before them. When words after them say what to remove \
     ("scrap that, not the X", "scratch the last bit"), remove only that part. "Let me rephrase" \
-    or "let me start again" after an unfinished sentence removes that unfinished part.
+    or "let me start again" after an unfinished sentence removes only that unfinished part; a \
+    greeting or a finished sentence before it stays.
     d. An addition ("plus X", "and X too") adds to what was said; nothing is removed.
     e. These words only revise something the speaker already said in this dictation. "I'd like \
     tea, not coffee" never asked for coffee, so it is ordinary text, as are "don't cancel that \
-    order", "he said scratch that", "never mind the typos, the draft is fine" and instructions \
-    to the reader about something that already exists ("Remove the old logo from the deck"). \
-    Keep such text unchanged.
+    order", "he said scratch that", "never mind the typos, the draft is fine", "my bad" as a plain \
+    apology, and instructions to the reader about something that already exists ("Remove the old \
+    logo from the deck"). Keep such text unchanged.
     5. "Start over" discards everything before it.
     6. When the speaker enumerates items ("first ... second ...", "number one ...", or a series \
     after "the following" or a colon), format them as a list, one item per line: "1." numbering \

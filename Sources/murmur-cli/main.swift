@@ -12,7 +12,7 @@ import MurmurCore
 let usage = """
 usage:
   murmur-cli rules <text>
-  murmur-cli prep    reads JSONL {"id","input","style"?,"vocabulary"?}, writes {"id","rules_text","cues","needs_llm","messages"}
+  murmur-cli prep    reads JSONL {"id","input","style"?,"vocabulary"?,"snippets"?}, writes {"id","rules_text","cues","needs_llm","messages"}
   murmur-cli finish  reads JSONL {"id","input","llm_output"?,"style"?,"vocabulary"?,"mode"?,"snippets"?}, writes {"id","result"}
   murmur-cli notes-plan    reads JSONL {"id","segments"}, writes {"id","updates":[{"at","segments","final","complete"}]}
   murmur-cli notes-prep    reads JSONL {"id","notes","segments","final","complete"?,"known"?,"retry"?}, writes {"id","messages","max_tokens"}
@@ -24,6 +24,7 @@ struct PrepCase: Decodable {
     var input: String
     var style: WritingStyle?
     var vocabulary: [String]?
+    var snippets: [SnippetSpec]?
 }
 
 struct PrepOutput: Encodable {
@@ -174,7 +175,13 @@ case "prep":
             rules_text: rules.text,
             cues: rules.cues.map(\.rawValue).sorted(),
             needs_llm: rules.needsLLM,
-            messages: CleanupPrompt.messages(dictation: rules.text, style: item.style ?? .standard, vocabulary: item.vocabulary ?? [])
+            messages: CleanupPrompt.messages(
+                dictation: rules.text, style: item.style ?? .standard,
+                vocabulary: DictationProcessor.cleanupVocabulary(for: rules.text, context: DictationContext(
+                    dictionary: PersonalDictionary(terms: item.vocabulary ?? []),
+                    snippets: Snippets((item.snippets ?? []).map { Snippet(trigger: $0.trigger, text: $0.text) })
+                ))
+            )
         ))
     }
 

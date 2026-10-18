@@ -86,6 +86,23 @@ final class SnippetTests: XCTestCase {
         XCTAssertEqual(result.snippets, ["my GitHub"])
     }
 
+    func testTriggersSaidInTheDictationAreKeptVerbatimByTheLLM() async {
+        final class RecordingCleaner: TextCleaner, @unchecked Sendable {
+            var vocabulary: [String] = []
+            func clean(_ dictation: String, style: WritingStyle, vocabulary: [String]) async throws -> String {
+                self.vocabulary = vocabulary
+                return dictation
+            }
+        }
+        let github = Snippet(trigger: "my GitHub", text: "https://github.com/jlee")
+        let cleaner = RecordingCleaner()
+        let context = DictationContext(
+            mode: .always, dictionary: PersonalDictionary(terms: ["Kubernetes"]), snippets: Snippets([linkedIn, github])
+        )
+        _ = await DictationProcessor(cleaner: cleaner).process("Here are my links: first my GitHub, second Kubernetes.", context: context)
+        XCTAssertEqual(cleaner.vocabulary, ["Kubernetes", "my GitHub"])
+    }
+
     func testTriggerNeverSpansPunctuationOrPartOfALongerToken() {
         XCTAssertEqual(expand("Oh my, LinkedIn is down again.", [linkedIn]), "Oh my, LinkedIn is down again.")
         XCTAssertEqual(expand("Visit my linkedin.com page.", [linkedIn]), "Visit my linkedin.com page.")

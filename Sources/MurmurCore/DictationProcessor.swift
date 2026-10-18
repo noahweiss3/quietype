@@ -70,7 +70,8 @@ public struct DictationProcessor: Sendable {
         if wantsLLM, let cleaner, !rules.text.isEmpty {
             let llmStarted = Date()
             do {
-                let output = try await cleaner.clean(rules.text, style: context.style, vocabulary: context.dictionary.terms)
+                let vocabulary = Self.cleanupVocabulary(for: rules.text, context: context)
+                let output = try await cleaner.clean(rules.text, style: context.style, vocabulary: vocabulary)
                 switch OutputGuard.check(input: rules.text, output: output, cues: rules.cues) {
                 case let .accepted(cleaned):
                     text = cleaned
@@ -101,6 +102,13 @@ public struct DictationProcessor: Sendable {
             raw: raw, text: text, path: path, note: note, rulesSeconds: rulesSeconds, llmSeconds: llmSeconds,
             snippets: expansion.used.isEmpty ? nil : expansion.used
         )
+    }
+
+    /// What the LLM is told to spell exactly: the dictionary's terms plus the snippet triggers said
+    /// in this dictation, so a trigger isn't reworded ("first my GitHub" → "1. GitHub") before it
+    /// can expand. Only triggers go to the LLM, never the stored text.
+    public static func cleanupVocabulary(for text: String, context: DictationContext) -> [String] {
+        context.dictionary.terms + context.snippets.expand(text).used
     }
 
     /// Trims, and drops the period after a single phrase in a terminal or editor.
