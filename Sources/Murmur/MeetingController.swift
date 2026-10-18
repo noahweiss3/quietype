@@ -247,7 +247,8 @@ final class MeetingController: ObservableObject {
         notes = await writer.notes
         notesError = await writer.lastError
         notesFailures = notesError == nil ? 0 : notesFailures + 1
-        isUpdatingNotes = false
+        // If Stop was pressed meanwhile, the final pass is running and owns the flag.
+        if state == .recording { isUpdatingNotes = false }
     }
 
     /// Saves every half minute while recording, so quitting or a crash loses little.

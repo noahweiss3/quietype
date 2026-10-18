@@ -24,8 +24,9 @@ struct MeetingView: View {
         HStack(spacing: 10) {
             switch meeting.state {
             case .idle:
-                Text("Murmur transcribes your mic and the call's audio on this Mac and keeps notes as you talk.")
+                Text("Murmur transcribes your mic and the call's audio on this Mac and keeps notes as you talk. Let everyone on the call know before you start.")
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             case .starting:
                 ProgressView().controlSize(.small)
                 Text("Starting…")

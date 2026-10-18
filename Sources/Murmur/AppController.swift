@@ -206,7 +206,7 @@ final class AppController: ObservableObject {
         guard dictationTask == nil else { return hotkey.reset() } // still pasting the previous one
         guard !meeting.isActive else {
             hotkey.reset()
-            return hud.flash("Meeting notes are recording")
+            return hud.flash("Dictation is paused during meeting notes")
         }
         guard speechState == .ready else {
             hotkey.reset()

@@ -69,10 +69,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(recent)
         menu.addItem(item("Paste Last Dictation") { [weak self] in self?.controller.pasteLast() })
         menu.addItem(.separator())
-        if controller.meeting.state == .recording {
+        switch controller.meeting.state {
+        case .starting, .recording:
             menu.addItem(item("Stop Meeting Notes") { [weak self] in Task { await self?.controller.meeting.stop() } })
             menu.addItem(item("Show Meeting Notes…") { [weak self] in self?.showMeeting() })
-        } else {
+        case .finishing:
+            menu.addItem(disabled("Finishing Meeting Notes…"))
+            menu.addItem(item("Show Meeting Notes…") { [weak self] in self?.showMeeting() })
+        case .idle, .finished:
             menu.addItem(item("Start Meeting Notes") { [weak self] in
                 self?.showMeeting()
                 Task { await self?.controller.meeting.start() }
