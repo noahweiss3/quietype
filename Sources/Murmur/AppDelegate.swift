@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private lazy var controller = AppController(settings: settings)
     private var statusItem: NSStatusItem!
     private var settingsWindow: NSWindow?
+    private var meetingWindow: NSWindow?
     private var cancellables: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -15,17 +16,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
-        updateIcon(recording: false)
-        controller.$isRecording.sink { [weak self] in self?.updateIcon(recording: $0) }.store(in: &cancellables)
+        updateIcon(recording: false, meeting: false)
+        controller.$isRecording.sink { [weak self] recording in
+            guard let self else { return }
+            self.updateIcon(recording: recording, meeting: self.controller.meeting.isActive)
+        }.store(in: &cancellables)
+        controller.meeting.$state.sink { [weak self] state in
+            guard let self else { return }
+            self.updateIcon(recording: self.controller.isRecording, meeting: state == .recording || state == .finishing)
+        }.store(in: &cancellables)
 
         controller.start()
         if !settings.hasCompletedSetup || !Permissions.accessibilityGranted { showSettings() }
     }
 
-    private func updateIcon(recording: Bool) {
-        let name = recording ? "waveform.circle.fill" : "waveform"
+    func applicationWillTerminate(_ notification: Notification) {
+        controller.meeting.saveNow()
+    }
+
+    private func updateIcon(recording: Bool, meeting: Bool) {
+        let name = meeting ? "record.circle" : recording ? "waveform.circle.fill" : "waveform"
         statusItem.button?.image = NSImage(systemSymbolName: name, accessibilityDescription: "Murmur")
-        statusItem.button?.contentTintColor = recording ? .systemRed : nil
+        statusItem.button?.contentTintColor = recording || meeting ? .systemRed : nil
     }
 
     // Rebuilt every time it opens, so status and history are current.
@@ -57,6 +69,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(recent)
         menu.addItem(item("Paste Last Dictation") { [weak self] in self?.controller.pasteLast() })
         menu.addItem(.separator())
+        switch controller.meeting.state {
+        case .starting, .recording:
+            menu.addItem(item("Stop Meeting Notes") { [weak self] in Task { await self?.controller.meeting.stop() } })
+            menu.addItem(item("Show Meeting Notes…") { [weak self] in self?.showMeeting() })
+        case .finishing:
+            menu.addItem(disabled("Finishing Meeting Notes…"))
+            menu.addItem(item("Show Meeting Notes…") { [weak self] in self?.showMeeting() })
+        case .idle, .finished:
+            menu.addItem(item("Start Meeting Notes") { [weak self] in
+                self?.showMeeting()
+                Task { await self?.controller.meeting.start() }
+            })
+            if meetingWindow != nil { menu.addItem(item("Show Meeting Notes…") { [weak self] in self?.showMeeting() }) }
+        }
+        menu.addItem(.separator())
         menu.addItem(item("Settings…", key: ",") { [weak self] in self?.showSettings() })
         menu.addItem(item("Quit Murmur", key: "q") { NSApp.terminate(nil) })
     }
@@ -77,6 +104,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    func showMeeting() {
+        if meetingWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 860, height: 560),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Meeting Notes"
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: MeetingView(meeting: controller.meeting))
+            window.center()
+            meetingWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        meetingWindow?.makeKeyAndOrderFront(nil)
     }
 
     private func disabled(_ title: String) -> NSMenuItem {

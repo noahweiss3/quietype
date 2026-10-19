@@ -18,12 +18,14 @@ public struct DictationContext: Sendable {
     public var style: WritingStyle
     public var mode: CleanupMode
     public var dictionary: PersonalDictionary
+    public var snippets: Snippets
     public var appendTrailingSpace: Bool
 
-    public init(style: WritingStyle = .standard, mode: CleanupMode = .smart, dictionary: PersonalDictionary = PersonalDictionary(), appendTrailingSpace: Bool = true) {
+    public init(style: WritingStyle = .standard, mode: CleanupMode = .smart, dictionary: PersonalDictionary = PersonalDictionary(), snippets: Snippets = Snippets(), appendTrailingSpace: Bool = true) {
         self.style = style
         self.mode = mode
         self.dictionary = dictionary
+        self.snippets = snippets
         self.appendTrailingSpace = appendTrailingSpace
     }
 }
@@ -42,6 +44,8 @@ public struct ProcessedDictation: Codable, Equatable, Sendable {
     public var note: String?
     public var rulesSeconds: Double
     public var llmSeconds: Double?
+    /// Snippet triggers that were expanded.
+    public var snippets: [String]? = nil
 }
 
 /// Everything between the transcript and the text that gets pasted.
@@ -66,7 +70,8 @@ public struct DictationProcessor: Sendable {
         if wantsLLM, let cleaner, !rules.text.isEmpty {
             let llmStarted = Date()
             do {
-                let output = try await cleaner.clean(rules.text, style: context.style, vocabulary: context.dictionary.terms)
+                let vocabulary = Self.cleanupVocabulary(for: rules.text, context: context)
+                let output = try await cleaner.clean(rules.text, style: context.style, vocabulary: vocabulary)
                 switch OutputGuard.check(input: rules.text, output: output, cues: rules.cues) {
                 case let .accepted(cleaned):
                     text = cleaned
@@ -84,21 +89,42 @@ public struct DictationProcessor: Sendable {
 
         if path != .llm { text = Rules.applyFallbackCorrections(text) }
         text = context.dictionary.apply(to: text)
-        text = Self.finalize(text, style: context.style, appendTrailingSpace: context.appendTrailingSpace)
+        text = Self.finalize(text, style: context.style)
+        // Last, so neither the LLM nor the dictionary touches the stored text, and the code-style
+        // period is decided on what was said rather than on the dots inside a URL.
+        let expansion = context.snippets.expand(text)
+        text = expansion.text
+        if context.appendTrailingSpace {
+            text = Self.appendingTrailingSpace(to: text, style: context.style, expandedSnippet: !expansion.used.isEmpty)
+        }
 
-        return ProcessedDictation(raw: raw, text: text, path: path, note: note, rulesSeconds: rulesSeconds, llmSeconds: llmSeconds)
+        return ProcessedDictation(
+            raw: raw, text: text, path: path, note: note, rulesSeconds: rulesSeconds, llmSeconds: llmSeconds,
+            snippets: expansion.used.isEmpty ? nil : expansion.used
+        )
     }
 
-    /// Adds a trailing space after a finished sentence so back-to-back dictations don't run together.
-    static func finalize(_ text: String, style: WritingStyle, appendTrailingSpace: Bool) -> String {
+    /// What the LLM is told to spell exactly: the dictionary's terms plus the snippet triggers said
+    /// in this dictation, so a trigger isn't reworded ("first my GitHub" → "1. GitHub") before it
+    /// can expand. Only triggers go to the LLM, never the stored text.
+    public static func cleanupVocabulary(for text: String, context: DictationContext) -> [String] {
+        context.dictionary.terms + context.snippets.expand(text).used
+    }
+
+    /// Trims, and drops the period after a single phrase in a terminal or editor.
+    static func finalize(_ text: String, style: WritingStyle) -> String {
         var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if style == .code, !result.contains("\n"), result.hasSuffix("."), !result.dropLast().contains(".") {
-            result.removeLast() // a single phrase in a terminal or editor shouldn't end with a period
-        }
-        if appendTrailingSpace, !result.isEmpty, style != .code, !result.contains("\n"),
-           let last = result.last, ".!?,;:".contains(last) {
-            result += " "
+            result.removeLast()
         }
         return result
+    }
+
+    /// Adds a space after a finished sentence so back-to-back dictations don't run together. An
+    /// expanded snippet counts as finished: it may have swallowed the period ("My calendly link."
+    /// is just the URL), and the next dictation would otherwise run into it.
+    static func appendingTrailingSpace(to text: String, style: WritingStyle, expandedSnippet: Bool) -> String {
+        guard style != .code, !text.isEmpty, !text.contains("\n"), let last = text.last else { return text }
+        return expandedSnippet || ".!?,;:".contains(last) ? text + " " : text
     }
 }

@@ -11,6 +11,7 @@ public enum LlamaError: Error, CustomStringConvertible {
     case decodeFailed(Int32)
     case cacheTrimFailed
     case promptTooLong(Int)
+    case outputTruncated(Int)
 
     public var description: String {
         switch self {
@@ -21,6 +22,7 @@ public enum LlamaError: Error, CustomStringConvertible {
         case let .decodeFailed(code): return "llama_decode failed (\(code))"
         case .cacheTrimFailed: return "could not trim the KV cache"
         case let .promptTooLong(tokens): return "dictation too long for the cleanup context (\(tokens) tokens)"
+        case let .outputTruncated(tokens): return "the answer hit the \(tokens)-token limit before it finished"
         }
     }
 }
@@ -41,8 +43,10 @@ final class LlamaSession {
     private var batch: llama_batch
     private let batchCapacity: Int32 = 512
     private let vocabSize: Int
+    /// Set when this session borrows another session's weights; keeps them alive.
+    private let modelOwner: LlamaSession?
 
-    init(modelPath: String, contextLength: Int = 4096, gpuLayers: Int32 = 999) throws {
+    convenience init(modelPath: String, contextLength: Int = 4096, gpuLayers: Int32 = 999) throws {
         _ = backendInit
 
         var modelParams = llama_model_default_params()
@@ -50,7 +54,16 @@ final class LlamaSession {
         guard let model = llama_model_load_from_file(modelPath, modelParams) else {
             throw LlamaError.modelLoadFailed(modelPath)
         }
+        try self.init(model: model, modelOwner: nil, contextLength: contextLength)
+    }
 
+    /// A second context on the same weights, so another job (meeting notes) gets its own KV cache
+    /// without loading the model twice or evicting this session's cached prompt.
+    convenience init(sharingModelOf owner: LlamaSession, contextLength: Int) throws {
+        try self.init(model: owner.model, modelOwner: owner, contextLength: contextLength)
+    }
+
+    private init(model: OpaquePointer, modelOwner: LlamaSession?, contextLength: Int) throws {
         var contextParams = llama_context_default_params()
         contextParams.n_ctx = UInt32(contextLength)
         contextParams.n_batch = UInt32(batchCapacity)
@@ -60,11 +73,12 @@ final class LlamaSession {
         contextParams.n_threads_batch = threads
         contextParams.no_perf = true
         guard let context = llama_init_from_model(model, contextParams) else {
-            llama_model_free(model)
+            if modelOwner == nil { llama_model_free(model) }
             throw LlamaError.contextFailed
         }
 
         self.model = model
+        self.modelOwner = modelOwner
         self.context = context
         self.contextLength = contextLength
         vocab = llama_model_get_vocab(model)
@@ -75,7 +89,7 @@ final class LlamaSession {
     deinit {
         llama_batch_free(batch)
         llama_free(context)
-        llama_model_free(model)
+        if modelOwner == nil { llama_model_free(model) }
     }
 
     // MARK: Text

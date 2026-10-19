@@ -29,15 +29,46 @@ public enum OutputGuard {
             }
         }
         // Markdown-style hard breaks ("line  \n") are noise outside a markdown renderer.
-        return text.split(separator: "\n", omittingEmptySubsequences: false)
+        text = text.split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression) }
             .joined(separator: "\n")
+        return renumberingLists(text)
+    }
+
+    /// A numbered list keeps the speaker's numbers when they took an item back ("first eggs,
+    /// second milk, third bread, scratch the bread, fourth coffee" → 1, 2, 4); lists read 1, 2, 3.
+    static func renumberingLists(_ text: String) -> String {
+        var lines = text.components(separatedBy: "\n")
+        var start = 0
+        while start < lines.count {
+            var numbers: [Int] = []
+            while start + numbers.count < lines.count, let number = listNumber(lines[start + numbers.count]),
+                  number > (numbers.last ?? 0) {
+                numbers.append(number)
+            }
+            if numbers.first == 1, numbers != Array(1...numbers.count) {
+                for offset in numbers.indices {
+                    let line = lines[start + offset]
+                    lines[start + offset] = String(offset + 1) + String(line.drop { $0.isNumber })
+                }
+            }
+            start += max(numbers.count, 1)
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func listNumber(_ line: String) -> Int? {
+        let digits = line.prefix { $0.isNumber }
+        guard !digits.isEmpty, line.dropFirst(digits.count).hasPrefix(". ") else { return nil }
+        return Int(digits)
     }
 
     public static func check(input: String, output rawOutput: String, cues: Set<CleanupCue>) -> Verdict {
         let output = sanitize(rawOutput)
         let inputWords = comparableWords(input)
         let outputWords = comparableWords(output)
+        // "bullet point", "new line" and spoken punctuation become markup, not words.
+        let spokenWords = comparableWords(withoutSpokenFormatting(input))
 
         if outputWords.isEmpty {
             // Only plausible when the speaker cancelled everything they said.
@@ -49,10 +80,10 @@ public enum OutputGuard {
         // means the model obeyed the dictation ("...reply with the word banana" → "banana").
         // A correction can legitimately drop a lot ("... Scratch that."), but not nearly everything.
         let droppedTooMuch = cues.contains(.correction)
-            ? outputWords.count * 4 <= inputWords.count
-            : outputWords.count * 2 < inputWords.count
+            ? outputWords.count * 4 <= spokenWords.count
+            : outputWords.count * 2 < spokenWords.count
         if droppedTooMuch, !isRestartedTail(output: outputWords, input: input) {
-            return .rejected(reason: "dropped too much (\(outputWords.count) of \(inputWords.count) words)")
+            return .rejected(reason: "dropped too much (\(outputWords.count) of \(spokenWords.count) words)")
         }
 
         if outputWords.count > inputWords.count + max(4, inputWords.count / 5) {
@@ -66,6 +97,13 @@ public enum OutputGuard {
             return .rejected(reason: "too many new words: \(novel.prefix(6).joined(separator: ", "))")
         }
         return .accepted(output)
+    }
+
+    static func withoutSpokenFormatting(_ text: String) -> String {
+        text.replacingOccurrences(
+            of: "\\b(?:bullet points?|new line|next line|new paragraph|question mark|exclamation (?:point|mark)|full stop|comma)\\b",
+            with: " ", options: [.regularExpression, .caseInsensitive]
+        )
     }
 
     /// True when the output only uses words spoken after the last "start over", which is what a

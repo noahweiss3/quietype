@@ -1,0 +1,179 @@
+{
+ "id": "acme-renewal-call",
+ "title": "Acme renewal call",
+ "segments": [
+  {
+   "id": 0,
+   "speaker": "me",
+   "start": 3.0,
+   "end": 11.8,
+   "text": "Hi Dana, thanks for making time. I wanted to walk through the renewal and hear how the first year went for your team."
+  },
+  {
+   "id": 1,
+   "speaker": "others",
+   "start": 12.6,
+   "end": 24.2,
+   "text": "Happy to. Overall it's been good. The team uses it every day. The main complaint is the export to Excel, it times out on anything over about fifty thousand rows."
+  },
+  {
+   "id": 2,
+   "speaker": "me",
+   "start": 25.1,
+   "end": 33.2,
+   "text": "That's a known issue. We have a fix in progress, streaming exports, and it should land by the end of November."
+  },
+  {
+   "id": 3,
+   "speaker": "others",
+   "start": 33.9,
+   "end": 41.2,
+   "text": "End of November is fine as long as it actually happens. We hit it every month at quarter close."
+  },
+  {
+   "id": 4,
+   "speaker": "me",
+   "start": 42.2,
+   "end": 50.2,
+   "text": "Understood. I'll send you a written timeline for that fix this week so your finance lead has something to point to."
+  },
+  {
+   "id": 5,
+   "speaker": "others",
+   "start": 51.1,
+   "end": 62.3,
+   "text": "Thanks. On the renewal itself, we're at eighty seats now. We'd like to go to one hundred and twenty, but procurement wants a better per-seat price at that volume."
+  },
+  {
+   "id": 6,
+   "speaker": "me",
+   "start": 63.1,
+   "end": 75.4,
+   "text": "That's reasonable. At a hundred and twenty seats I can offer fifteen percent off list. Actually, let me correct that, at that tier it's eighteen percent, and that's for a two-year term."
+  },
+  {
+   "id": 7,
+   "speaker": "others",
+   "start": 76.3,
+   "end": 80.9,
+   "text": "Two years is a harder sell. What would one year look like?"
+  },
+  {
+   "id": 8,
+   "speaker": "me",
+   "start": 81.5,
+   "end": 85.0,
+   "text": "On a one-year term it would be twelve percent."
+  },
+  {
+   "id": 9,
+   "speaker": "others",
+   "start": 85.9,
+   "end": 97.0,
+   "text": "Okay. I think procurement will go for the two-year at eighteen if we can add a clause that lets us drop up to ten seats at the first anniversary."
+  },
+  {
+   "id": 10,
+   "speaker": "me",
+   "start": 97.8,
+   "end": 106.3,
+   "text": "I can't promise that clause on this call, I need to check with our deal desk. But I don't see why not."
+  },
+  {
+   "id": 11,
+   "speaker": "others",
+   "start": 107.2,
+   "end": 115.7,
+   "text": "That's fine. And one more ask, can we get single sign-on included? Right now it's an add-on and security keeps flagging it."
+  },
+  {
+   "id": 12,
+   "speaker": "me",
+   "start": 116.4,
+   "end": 122.5,
+   "text": "Yes. For a two-year deal at that size, I'm comfortable including SSO at no extra cost."
+  },
+  {
+   "id": 13,
+   "speaker": "others",
+   "start": 123.5,
+   "end": 130.1,
+   "text": "Great. Then the plan on our side is I'll take the two-year proposal to procurement next Tuesday."
+  },
+  {
+   "id": 14,
+   "speaker": "me",
+   "start": 130.8,
+   "end": 142.7,
+   "text": "Sounds good. So I'll get you the proposal by Friday: a hundred and twenty seats, two years, eighteen percent off, SSO included, and I'll come back on the seat flexibility clause."
+  },
+  {
+   "id": 15,
+   "speaker": "others",
+   "start": 143.6,
+   "end": 150.1,
+   "text": "Perfect. Oh, and our renewal date is December fifteenth, so we'd want everything signed by early December."
+  },
+  {
+   "id": 16,
+   "speaker": "me",
+   "start": 150.9,
+   "end": 153.6,
+   "text": "Noted, early December. Thanks Dana, talk soon."
+  }
+ ],
+ "reference": {
+  "decisions": [
+   "Direction: 120 seats, two-year term, 18% off list (not 15%), SSO included at no extra cost"
+  ],
+  "action_items": [
+   "You: written timeline for the streaming-export fix to Dana this week",
+   "You: proposal to Dana by Friday (120 seats, 2 years, 18%, SSO)",
+   "You: check seat-flexibility clause (drop up to 10 seats at first anniversary) with deal desk",
+   "Dana: take the two-year proposal to procurement next Tuesday"
+  ],
+  "open_questions": [
+   "Seat flexibility clause pending deal desk"
+  ],
+  "facts": [
+   "Excel export times out over ~50k rows; fix by end of November",
+   "Currently 80 seats",
+   "One-year option would be 12%",
+   "Renewal date Dec 15, sign by early December"
+  ]
+ },
+ "checks": {
+  "must": [
+   "18",
+   "120",
+   "two-year",
+   "SSO",
+   "Dana",
+   "deal desk",
+   "Friday",
+   "December"
+  ],
+  "must_not": [
+   "Someone",
+   "15%",
+   "fifteen percent"
+  ],
+  "sections": {
+   "Action items": {
+    "must": [
+     "Dana",
+     "deal desk",
+     "timeline"
+    ],
+    "must_not": []
+   },
+   "Decisions": {
+    "must": [],
+    "must_not": [
+     "procurement will",
+     "procurement accept"
+    ]
+   }
+  }
+ }
+}

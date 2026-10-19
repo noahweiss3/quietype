@@ -25,7 +25,7 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Murmur records your voice while you hold the dictation key and transcribes it on this Mac.</string>
+    <string>Murmur records your voice while you hold the dictation key, or during meeting notes, and transcribes it on this Mac.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>
