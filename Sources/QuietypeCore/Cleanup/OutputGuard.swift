@@ -74,8 +74,10 @@ public enum OutputGuard {
         let spokenWords = comparableWords(withoutSpokenFormatting(input))
 
         if outputWords.isEmpty {
-            // Only plausible when the speaker cancelled everything they said.
-            return cues.contains(.correction) || inputWords.isEmpty
+            // Only right when the speaker cancelled everything they said. A replacement ("two, no
+            // wait, three") or a partial retraction also carries a correction cue, and emptying
+            // one of those would lose the whole dictation.
+            return inputWords.isEmpty || (cues.contains(.correction) && Rules.retractsEverything(input))
                 ? .accepted(output) : .rejected(reason: "empty output")
         }
 
@@ -100,23 +102,45 @@ public enum OutputGuard {
         if novel.count > allowedNovel {
             return .rejected(reason: "too many new words: \(novel.prefix(6).joined(separator: ", "))")
         }
+
+        // A changed number or a flipped "not" is one word, well within the novelty allowance, yet
+        // it reverses what the speaker meant.
+        if let number = inventedNumbers(input: input, output: output).first {
+            return .rejected(reason: "number not in the dictation: \(number)")
+        }
+        let saidNegations = negations(in: input)
+        let keptNegations = negations(in: output)
+        // Taking something back only ever removes words, so a new "not" is never a cleanup.
+        if keptNegations > saidNegations {
+            return .rejected(reason: "added a negation")
+        }
+        // A retraction the cues missed ("…, you won't need the putty knife, …") drops its "won't"
+        // along with what it names. Losing the negation and nothing else is a flipped meaning.
+        if !cues.contains(.correction), keptNegations < saidNegations,
+            spokenWords.count - outputWords.count <= saidNegations - keptNegations
+        {
+            return .rejected(reason: "dropped a negation")
+        }
         return .accepted(output)
     }
 
+    // The same command lists the rules and the cleanup prompt use, so a command the prompt turns
+    // into markup is never counted as a dropped word.
+    private static let spokenFormatting = try! NSRegularExpression(
+        pattern: Rules.commandPattern(Rules.layoutCommands + Rules.punctuationCommands + Rules.listCommands),
+        options: [.caseInsensitive]
+    )
+
     static func withoutSpokenFormatting(_ text: String) -> String {
-        text.replacingOccurrences(
-            of:
-                "\\b(?:bullet points?|new line|next line|new paragraph|question mark|exclamation (?:point|mark)|full stop|comma)\\b",
-            with: " ", options: [.regularExpression, .caseInsensitive]
-        )
+        spokenFormatting.stringByReplacingMatches(
+            in: text, range: NSRange(text.startIndex..., in: text), withTemplate: " ")
     }
 
     /// True when the output only uses words spoken after the last "start over", which is what a
     /// correct start-over looks like even though it drops most of the dictation.
     static func isRestartedTail(output: [String], input: String) -> Bool {
         let lowered = input.lowercased()
-        let markers = ["start over", "start again", "start from scratch", "begin again"]
-        let restarts = markers.compactMap { lowered.range(of: $0, options: .backwards) }
+        let restarts = Rules.startOverPhrases.compactMap { lowered.range(of: $0, options: .backwards) }
         guard let restart = restarts.max(by: { $0.upperBound < $1.upperBound }) else { return false }
         let tail = Set(comparableWords(String(lowered[restart.upperBound...])))
         return !tail.isEmpty && output.allSatisfy(tail.contains)
@@ -138,6 +162,76 @@ public enum OutputGuard {
         "seven": "7", "eight": "8", "nine": "9", "ten": "10", "eleven": "11", "twelve": "12",
         "first": "1", "second": "2", "third": "3", "fourth": "4", "fifth": "5", "sixth": "6",
         "seventh": "7", "eighth": "8", "ninth": "9", "tenth": "10",
+    ]
+
+    // MARK: Numbers and negation
+
+    /// Numbers written as digits in the output that the speaker never said. A list's own numbering
+    /// doesn't count, and neither does a run of spoken digits written as one number ("five five
+    /// five" as 555). Nothing is reported when the dictation has number words that combine with
+    /// others ("four twenty-five" is 425, "three fifty" is 350), which can be written too many ways
+    /// to trace back word by word.
+    static func inventedNumbers(input: String, output: String) -> [String] {
+        let spoken = tokens(input)
+        guard !spoken.contains(where: compoundNumberWords.contains) else { return [] }
+        let said = numbers(in: spoken, countingWords: true)
+        var explained: Set<String> = ["0"] // the padding of "7:00"
+        for start in said.indices {
+            for end in start..<min(said.count, start + 12) { explained.insert(said[start...end].joined()) }
+        }
+        let body = output.components(separatedBy: "\n")
+            .map { $0.replacingOccurrences(of: #"^\s*\d+[.)]\s"#, with: "", options: .regularExpression) }
+            .joined(separator: "\n")
+        return numbers(in: tokens(body), countingWords: false).filter { !explained.contains($0) }
+    }
+
+    private static let numberToken = try! NSRegularExpression(pattern: #"\d+|\p{L}+"#)
+
+    /// Lowercased runs of digits or letters, with thousands separators dropped so "4,250" is one run.
+    private static func tokens(_ text: String) -> [String] {
+        let joined = text.replacingOccurrences(of: #"(?<=\d),(?=\d{3}(?!\d))"#, with: "", options: .regularExpression)
+        let range = NSRange(joined.startIndex..., in: joined)
+        return numberToken.matches(in: joined, range: range).compactMap { match in
+            Range(match.range, in: joined).map { joined[$0].lowercased() }
+        }
+    }
+
+    /// The numbers among `tokens`, in order and without leading zeros ("05" is "5"). With
+    /// `countingWords`, small number words count as their digits too.
+    private static func numbers(in tokens: [String], countingWords: Bool) -> [String] {
+        tokens.compactMap { token in
+            if countingWords, let digit = numberWords[token] { return digit }
+            guard token.first?.isNumber == true else { return nil }
+            let trimmed = token.drop { $0 == "0" }
+            return trimmed.isEmpty ? "0" : String(trimmed)
+        }
+    }
+
+    private static let compoundNumberWords: Set<String> = [
+        "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+        "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+        "hundred", "hundreds", "thousand", "thousands", "million", "millions", "billion", "billions",
+        "dozen", "dozens", "half", "halves", "quarter", "quarters",
+        "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth",
+        "eighteenth", "nineteenth", "twentieth", "thirtieth", "fortieth", "fiftieth", "sixtieth",
+        "seventieth", "eightieth", "ninetieth", "hundredth", "thousandth",
+    ]
+
+    /// How often the text says "not", "never" or a "-n't" contraction, written with or without
+    /// the apostrophe. "Never mind" takes something back rather than negating it.
+    static func negations(in text: String) -> Int {
+        let lowered = text.lowercased().replacingOccurrences(of: "’", with: "'")
+            .replacingOccurrences(of: #"\bnever ?mind\b"#, with: " ", options: .regularExpression)
+        return lowered.split { !($0.isLetter || $0 == "'") }
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "'")) }
+            .filter { $0.hasSuffix("n't") || negationWords.contains($0.replacingOccurrences(of: "'", with: "")) }
+            .count
+    }
+
+    private static let negationWords: Set<String> = [
+        "not", "never", "cannot", "nor", "dont", "doesnt", "didnt", "isnt", "arent", "wasnt", "werent",
+        "cant", "couldnt", "shouldnt", "wouldnt", "wont", "hasnt", "havent", "hadnt", "aint", "mustnt",
+        "neednt",
     ]
 
     // Words the cleanup may legitimately introduce: list glue, contractions, articles.

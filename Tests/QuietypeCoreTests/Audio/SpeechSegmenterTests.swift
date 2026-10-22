@@ -58,4 +58,12 @@ final class SpeechSegmenterTests: XCTestCase {
         var segmenter = SpeechSegmenter()
         XCTAssertEqual(segmenter.append(tone(45)), [])
     }
+
+    func testAVeryLowSampleRateStillConsumesItsInput() {
+        // 10 Hz makes a 30 ms frame shorter than one sample; it must still advance.
+        var segmenter = SpeechSegmenter(sampleRate: 10, minPause: 0.5, minSegment: 1)
+        let closed = segmenter.append(Array(repeating: 0.2, count: 20) + Array(repeating: 0, count: 30))
+        XCTAssertEqual(closed, [0..<28], "cut in the middle of the pause")
+        XCTAssertEqual(segmenter.sampleRate, 10)
+    }
 }

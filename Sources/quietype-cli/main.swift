@@ -100,11 +100,6 @@ struct FinishCase: Decodable {
     }
 }
 
-struct SnippetSpec: Decodable {
-    var trigger: String
-    var text: String
-}
-
 struct FinishOutput: Encodable {
     var id: String
     var result: ProcessedDictation
@@ -117,7 +112,7 @@ struct RecordedCleaner: TextCleaner {
 }
 
 func snippets(_ specs: [SnippetSpec]?) -> Snippets {
-    Snippets((specs ?? []).map { Snippet(trigger: $0.trigger, text: $0.text) })
+    Snippets((specs ?? []).map(\.snippet))
 }
 
 // MARK: Meeting notes

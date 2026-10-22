@@ -17,6 +17,20 @@ public struct Snippet: Codable, Equatable, Sendable, Identifiable {
     public var key: String { Snippets.normalize(trigger) }
 }
 
+/// A snippet as eval cases and benchmark inputs write it, `{"trigger", "text"}`, without the id
+/// the app stores.
+public struct SnippetSpec: Decodable, Equatable, Sendable {
+    public var trigger: String
+    public var text: String
+
+    public init(trigger: String, text: String) {
+        self.trigger = trigger
+        self.text = text
+    }
+
+    public var snippet: Snippet { Snippet(trigger: trigger, text: text) }
+}
+
 /// Expands snippet triggers in finished dictation text.
 ///
 /// Matching ignores case, punctuation and the spacing between words, because the transcriber
@@ -96,7 +110,8 @@ public struct Snippets: Codable, Equatable, Sendable {
         }
         // "…thanks. My email signature." shouldn't leave a period under a signature block.
         let rest = text[cursor...]
-        let endsWithBlock = matches.last!.snippet.text.contains("\n") && rest.allSatisfy { ".!? ".contains($0) }
+        let endsWithBlock =
+            matches.last?.snippet.text.contains("\n") == true && rest.allSatisfy { ".!? ".contains($0) }
         if !endsWithBlock { result += rest }
         return Expansion(text: result, used: matches.map(\.snippet.trigger))
     }

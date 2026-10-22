@@ -15,8 +15,8 @@ public enum WritingStyle: String, Codable, Sendable, CaseIterable {
         case .chat: return "a chat message. Keep the casual tone."
         case .email: return "an email. Use complete sentences and paragraphs."
         case .code:
-            return
-                "a code editor or terminal. Keep technical terms, identifiers and casing exactly as spoken; spoken corrections still apply."
+            return "a code editor or terminal. Keep technical terms, identifiers and casing exactly as spoken; "
+                + "spoken corrections still apply."
         }
     }
 }
@@ -160,11 +160,13 @@ public enum CleanupPrompt {
             "I need the report by noon."
         ),
         (
-            "Packing list bullet point passport bullet point charger bullet point sunglasses. Actually leave out the charger.",
+            "Packing list bullet point passport bullet point charger bullet point sunglasses. "
+                + "Actually leave out the charger.",
             "Packing list:\n- Passport\n- Sunglasses"
         ),
         (
-            "Book the hall for sixty guests, make that seventy, and order the cake from Rossi's, actually from Bianca's.",
+            "Book the hall for sixty guests, make that seventy, and order the cake from Rossi's, "
+                + "actually from Bianca's.",
             "Book the hall for seventy guests and order the cake from Bianca's."
         ),
         (

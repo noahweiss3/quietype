@@ -2,17 +2,20 @@ import Foundation
 
 /// Finds pauses in a live 16 kHz recording so finished stretches of speech can be transcribed
 /// while the speaker is still talking. When the key is released only the last stretch is left.
+///
+/// The settings are fixed at creation: the frame length is derived from the sample rate, and the
+/// sample positions already handed out are only meaningful at the rate they were counted in.
 public struct SpeechSegmenter: Sendable {
-    public var sampleRate: Int
+    public let sampleRate: Int
     /// A pause at least this long can end a segment.
-    public var minPause: TimeInterval
+    public let minPause: TimeInterval
     /// Segments shorter than this are not worth a separate transcription call.
-    public var minSegment: TimeInterval
+    public let minSegment: TimeInterval
     /// RMS below this always counts as silence.
-    public var silenceFloor: Float
+    public let silenceFloor: Float
     /// When set, a segment that runs this long without a pause is cut at its quietest moment in
     /// the last couple of seconds. Meetings need it; dictation ends when the key is released.
-    public var maxSegment: TimeInterval?
+    public let maxSegment: TimeInterval?
 
     /// Loudness is measured over frames this long.
     private static let frameMilliseconds = 30
@@ -31,12 +34,20 @@ public struct SpeechSegmenter: Sendable {
         silenceFloor: Float = 0.004,
         maxSegment: TimeInterval? = nil
     ) {
+        precondition(sampleRate > 0, "sample rate must be positive, not \(sampleRate)")
+        precondition(minPause.isFinite && minPause >= 0, "minPause must be a finite duration, not \(minPause)")
+        precondition(minSegment.isFinite && minSegment >= 0, "minSegment must be a finite duration, not \(minSegment)")
+        precondition(silenceFloor.isFinite && silenceFloor >= 0, "silenceFloor must be finite, not \(silenceFloor)")
+        precondition(
+            maxSegment.map { $0.isFinite && $0 > 0 } ?? true,
+            "maxSegment must be a positive duration, not \(String(describing: maxSegment))")
         self.sampleRate = sampleRate
         self.minPause = minPause
         self.minSegment = minSegment
         self.silenceFloor = silenceFloor
         self.maxSegment = maxSegment
-        frameLength = sampleRate * Self.frameMilliseconds / 1000
+        // At least one sample, or `append` would never consume its input at very low rates.
+        frameLength = max(1, sampleRate * Self.frameMilliseconds / 1000)
     }
 
     /// Feeds new samples; returns segments (absolute sample ranges) that just closed.

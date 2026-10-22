@@ -98,11 +98,6 @@ func parse() -> Options {
     return options
 }
 
-struct SnippetSpec: Decodable {
-    var trigger: String
-    var text: String
-}
-
 struct Case: Decodable {
     var id: String
     var input: String
@@ -165,7 +160,7 @@ func readCases(_ path: String) -> [Input] {
             let item = try JSONDecoder().decode(Case.self, from: Data(line.utf8))
             return Input(
                 id: item.id, text: item.input, style: item.style ?? .standard, vocabulary: item.vocabulary ?? [],
-                snippets: Snippets((item.snippets ?? []).map { Snippet(trigger: $0.trigger, text: $0.text) })
+                snippets: Snippets((item.snippets ?? []).map(\.snippet))
             )
         } catch {
             fail("\(path):\(number + 1): \(error)")
@@ -290,7 +285,8 @@ do {
             let result = try await live.finish()
             let seconds = String(format: "%.1f", result.audioSeconds)
             log(
-                "\n[\(path)] \(seconds)s audio, \(result.segments) segments, tail transcribed in \(ms(result.finishSeconds))"
+                "\n[\(path)] \(seconds)s audio, \(result.segments) segments, "
+                    + "tail transcribed in \(ms(result.finishSeconds))"
             )
             log("  transcript: \(result.text)")
             check(!result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "empty transcript")

@@ -97,4 +97,14 @@ final class SnippetsTests: XCTestCase {
         let decoded = try JSONDecoder().decode(Snippets.self, from: JSONEncoder().encode(snippets))
         XCTAssertEqual(decoded, snippets)
     }
+
+    func testASpecDecodesFromTriggerAndTextAlone() throws {
+        let specs = try JSONDecoder().decode(
+            [SnippetSpec].self, from: Data(#"[{"trigger": "my GitHub", "text": "https://github.com/jlee"}]"#.utf8))
+        XCTAssertEqual(specs, [SnippetSpec(trigger: "my GitHub", text: "https://github.com/jlee")])
+        let snippet = specs[0].snippet
+        XCTAssertEqual(snippet.trigger, "my GitHub")
+        XCTAssertEqual(snippet.text, "https://github.com/jlee")
+        XCTAssertEqual(Snippets([snippet]).expand("See my GitHub.").text, "See https://github.com/jlee.")
+    }
 }
