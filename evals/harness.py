@@ -214,12 +214,13 @@ def load_baselines(suites=None):
         where = f"{display(BASELINES)}: {suite}"
         if not isinstance(entry, dict) or set(entry) - {"total", "known_failures", "flaky"}:
             raise HarnessError(f"{where} needs total, known_failures and optionally flaky")
-        if not isinstance(entry.get("total"), int) or isinstance(entry.get("total"), bool):
+        total = entry.get("total")
+        if not isinstance(total, int) or isinstance(total, bool) or total < 0:
             raise HarnessError(f"{where}: total must be a whole number")
+        # Checked whatever the value, so a null, 0 or "" is an error rather than an empty list.
         for key in ("known_failures", "flaky"):
             entry.setdefault(key, [])
-            if entry[key]:
-                string_list(entry[key], f"{where}.{key}")
+            string_list(entry[key], f"{where}.{key}", allow_empty=True)
         if set(entry["known_failures"]) & set(entry["flaky"]):
             raise HarnessError(f"{where}: a case is listed as both a known failure and flaky")
     missing = [s for s in suites or [] if s not in baselines]

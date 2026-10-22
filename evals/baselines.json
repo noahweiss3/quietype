@@ -30,6 +30,18 @@
       "holdout-brake-job"
     ]
   },
+  "unseen": {
+    "total": 30,
+    "known_failures": [
+      "unseen-chain-room",
+      "unseen-keep-reported",
+      "unseen-rm-bob",
+      "unseen-rm-eggs",
+      "unseen-rm-hiring",
+      "unseen-rm-muffin",
+      "unseen-stutter-price"
+    ]
+  },
   "snippets": {
     "total": 12,
     "known_failures": []

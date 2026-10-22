@@ -19,22 +19,14 @@ Where this differs from the app:
 - The app decodes greedily on the Mac; the server is greedy too at temperature 0, but a
   different llama.cpp build or backend (the CPU in CI rather than Metal) can pick a different
   token now and then, so a case or two may differ.
-- An answer cut off at the output limit fails its case. The app would hand it to the output
-  guard, but a limit that cuts off answers is a bug to fix rather than a result to score.
+- An answer cut off at the output limit fails its case. The app never gets as far as the output
+  guard with one: its cleaner treats a cut-off answer as a failed cleanup, and the dictation
+  falls back to the rules pass. Scoring that fallback would hide a limit that is too tight, which
+  is a bug to fix.
 - The app also refuses a dictation too long for its cleanup context; no case comes close.
 
-Case files are JSON lines in evals/cases/, one case per line (evals/README.md has the details):
-    id, input             required; ids are unique within a file
-    category, intent      for the report: a grouping, and what the speaker meant
-    style                 standard (default), chat, email or code
-    vocabulary, snippets  personal dictionary terms; snippets as [{"trigger", "text"}]
-    expect                the whole output, ignoring differences in whitespace
-    must, must_not        substrings the output must or must not contain, ignoring case
-    must_any              lists of alternatives: the output contains one of each list, ignoring case
-    must_case             substrings the output must contain, matching case
-    must_not_exact        texts the whole output must not be
-Every case needs at least one of the assertions (expect and the must keys), and each list must be
-a non-empty list of non-empty strings: a malformed case is a harness error, never a pass.
+Case files are JSON lines in evals/cases/, one case per line. evals/README.md describes the keys
+and assertions; a malformed case is a harness error, never a pass.
 
     swift build --product quietype-cli
     python3 evals/run_evals.py                          # evals/cases/cleanup.jsonl
@@ -67,7 +59,7 @@ from harness import (
 
 CASES = EVALS / "cases"
 # The order --all runs the suites in; any other file in evals/cases/ follows, alphabetically.
-SUITE_ORDER = ["cleanup", "corrections", "corrections-extended", "holdout", "snippets"]
+SUITE_ORDER = ["cleanup", "corrections", "corrections-extended", "holdout", "unseen", "snippets"]
 
 ASSERTIONS = ["expect", "must", "must_any", "must_case", "must_not", "must_not_exact"]
 KNOWN_KEYS = {"id", "input", "category", "intent", "style", "vocabulary", "snippets", *ASSERTIONS}
@@ -167,6 +159,56 @@ def score(case, output):
     return failures
 
 
+# What run_suite reads from each quietype-cli answer, as (description, check) per key. Checked
+# before anything is indexed, so an older or broken quietype-cli is a harness error that names the
+# problem rather than a KeyError, or a case scored on half an answer.
+
+
+def is_messages(value):
+    return isinstance(value, list) and bool(value) and all(
+        isinstance(m, dict) and isinstance(m.get("role"), str) and isinstance(m.get("content"), str)
+        for m in value) and value[-1]["role"] == "user"
+
+
+PREP_FIELDS = {
+    "rules_text": ("a string", lambda v: isinstance(v, str)),
+    "cues": ("a list of strings", lambda v: isinstance(v, list) and all(isinstance(c, str) for c in v)),
+    "needs_llm": ("true or false", lambda v: isinstance(v, bool)),
+    "messages": ("a non-empty list of {role, content} strings ending with the user's", is_messages),
+}
+BUDGET_FIELDS = {
+    "max_tokens": ("a positive whole number", lambda v: isinstance(v, int) and not isinstance(v, bool) and v > 0),
+}
+FINISH_FIELDS = {
+    "result": ("an object with a string text and path",
+               lambda v: isinstance(v, dict) and isinstance(v.get("text"), str) and isinstance(v.get("path"), str)),
+}
+
+
+def cli_by_id(command, items, fields):
+    """Runs a quietype-cli command over `items` and returns its answers keyed by id, after checking
+    that there is exactly one answer per item and that each has `fields` in the expected shape."""
+    sent = {item["id"] for item in items}
+    answers = {}
+    for answer in cli(command, items):
+        if not isinstance(answer, dict) or not isinstance(answer.get("id"), str):
+            raise HarnessError(f"quietype-cli {command} printed an answer without an id: {json.dumps(answer)[:200]}")
+        name = answer["id"]
+        if name not in sent:
+            raise HarnessError(f"quietype-cli {command} answered {name!r}, which it wasn't asked about")
+        if name in answers:
+            raise HarnessError(f"quietype-cli {command} answered {name!r} twice")
+        for key, (shape, valid) in fields.items():
+            if key not in answer or not valid(answer[key]):
+                raise HarnessError(f"quietype-cli {command}: {key} for {name!r} must be {shape}, "
+                                   f"not {json.dumps(answer.get(key))[:200]}")
+        answers[name] = answer
+    missing = [item["id"] for item in items if item["id"] not in answers]
+    if missing:
+        raise HarnessError(f"quietype-cli {command} returned no result for {', '.join(missing)}")
+    return answers
+
+
 def template_tail(server, prep):
     """What the chat template puts after the per-dictation text: the end of the user turn and the
     assistant header. The app counts these tokens as part of each dictation."""
@@ -187,13 +229,13 @@ def ask_model(server, cases, prepped):
     tail = template_tail(server, prepped[cases[0]["id"]])
     counts = [{"id": c["id"], "input_tokens": server.count_tokens(prepped[c["id"]]["messages"][-1]["content"] + tail)}
               for c in cases]
-    limits = {b["id"]: b["max_tokens"] for b in cli("budget", counts)}
-    return {c["id"]: server.chat(prepped[c["id"]]["messages"], limits[c["id"]]) for c in cases}
+    limits = cli_by_id("budget", counts, BUDGET_FIELDS)
+    return {c["id"]: server.chat(prepped[c["id"]]["messages"], limits[c["id"]]["max_tokens"]) for c in cases}
 
 
 def run_suite(name, cases, server, all_llm):
-    prepped = {p["id"]: p for p in cli("prep", [
-        {k: c[k] for k in ("id", "input", "style", "vocabulary", "snippets") if k in c} for c in cases])}
+    prepped = cli_by_id("prep", [
+        {k: c[k] for k in ("id", "input", "style", "vocabulary", "snippets") if k in c} for c in cases], PREP_FIELDS)
     # Like the app: the model only sees a dictation the rules pass left something in.
     needs_model = [c for c in cases if (all_llm or prepped[c["id"]]["needs_llm"]) and prepped[c["id"]]["rules_text"]]
     answers = ask_model(server, needs_model, prepped)
@@ -205,10 +247,7 @@ def run_suite(name, cases, server, all_llm):
         if case["id"] in answers:
             item["llm_output"] = answers[case["id"]].text
         finish.append(item)
-    results = {r["id"]: r["result"] for r in cli("finish", finish)}
-    missing = [c["id"] for c in cases if c["id"] not in prepped or c["id"] not in results]
-    if missing:
-        raise HarnessError(f"quietype-cli returned no result for {', '.join(missing)}")
+    results = {i: answer["result"] for i, answer in cli_by_id("finish", finish, FINISH_FIELDS).items()}
 
     print(f"### {name} ({len(cases)} cases)")
     report, by_category = [], {}

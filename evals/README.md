@@ -13,9 +13,28 @@ reflects what the app would paste or show, not a reimplementation of it.
 | `cases/cleanup.jsonl` | 35 cases | The basics: fillers and stutters, sentences that must come through untouched, common corrections, "start over", lists, formatting commands, prompt injection ("write me a poem"), per-app style, vocabulary |
 | `cases/corrections.jsonl` | 46 cases | Self-corrections: taking something back ("x and y, scrap that, not y"), replacements, additions, chained and partial revisions, lists, and look-alikes that must be left alone ("I want pizza, not wings") |
 | `cases/corrections-extended.jsonl` | 25 cases | Less common wordings ("strike X", "take X off", "swap X for Y", "let's say"), corrections after a filler ("three days, uh, two days"), two revisions in one sentence |
-| `cases/holdout.jsonl` | 60 cases | Corrections kept out of prompt tuning, to catch a prompt that has overfitted to the suites above |
+| `cases/holdout.jsonl` | 60 cases | Corrections written without seeing the prompt, now regression cases (see [Where the cases come from](#where-the-cases-come-from)) |
+| `cases/unseen.jsonl` | 30 cases | Dictations written against a frozen prompt by someone who hadn't seen it: the clean measure of how the prompt generalizes |
 | `cases/snippets.jsonl` | 12 cases | Snippet expansion through the whole pipeline, including a correction between two snippets and near misses that must not expand |
 | `meetings/*.json` | 2 meetings | Live notes for a customer renewal call and a team launch sync: decisions versus proposals, owners of action items, numbers and dates, and corrections made during the call |
+
+### Where the cases come from
+
+`cleanup`, `corrections`, `corrections-extended` and `snippets` were written alongside the rules
+and the prompt, so they show what the app handles, not how well it handles dictations nobody
+anticipated.
+
+`holdout` was meant to answer that. Its cases were written without looking at the prompt, and
+their text never went into it: the prompt shares no run of five words with any holdout case. But
+the suite grew in three rounds, and misses from the earlier rounds informed general changes to the
+rules and the prompt, such as naming more ways to take something back. Its cases have shaped the
+prompt, so they are now regression cases like the others, and its score is not a clean measure of
+generalization.
+
+`unseen` is that measure. Its cases were written by someone who hadn't seen the prompt or the
+other suites, while the prompt was frozen. Its score stands only for that prompt: once a change to
+the rules or the prompt is made in response to an `unseen` miss, the suite becomes a regression
+suite too, and a new unseen set is needed for a clean measure.
 
 ## Running locally
 
@@ -51,7 +70,7 @@ passes while the only failures are the known ones in `baselines.json`.
 | Option | Meaning |
 | --- | --- |
 | `--cases PATH` | Run this case file; repeat the option for several. The default is `cases/cleanup.jsonl`. |
-| `--all` | Run every file in `cases/`: cleanup, corrections, corrections-extended, holdout, snippets, then any other file alphabetically. |
+| `--all` | Run every file in `cases/`: cleanup, corrections, corrections-extended, holdout, unseen, snippets, then any other file alphabetically. |
 | `--only ID,ID` | Run only these cases (or, for `run_meeting_notes.py`, these meetings). An id that doesn't exist is an error. |
 | `--all-llm` | Send every case to the model, like the app's "Always" cleanup mode. By default only cases the rules pass can't finish go to the model, as in the app's default mode. |
 | `--no-think` | Turn off thinking, for hybrid models such as Qwen3 1.7B; the app does the same for them. |
@@ -87,12 +106,16 @@ answering in time.
    and snippet expansion.
 4. The final text is checked against the case's assertions.
 
-Three things differ from the app. The app decodes greedily on the Mac's GPU; the server is greedy
+Three things differ from the app. First, the app decodes greedily on the Mac's GPU; the server is greedy
 too at temperature 0, but a different llama.cpp build or backend can pick a different token now
-and then. An answer cut off at the output limit fails its case, where the app would hand it to
-the output guard: a limit that cuts off answers is a bug to fix rather than a result to score.
+and then. Second, an answer cut off at the output limit fails its case. The app never pastes one either:
+its cleaner treats a cut-off answer as a failed cleanup before the output guard sees it, and the
+dictation falls back to the rules pass. The evals fail the case instead of scoring that fallback,
+because a limit that cuts off answers is a bug to fix.
 
-And the chat template is rendered by different code. `llama-server --jinja` runs the Jinja
+### The chat template
+
+The third difference is the code that renders the chat template. `llama-server --jinja` runs the Jinja
 template stored in the model file, while the app calls `llama_chat_apply_template`, llama.cpp's
 built-in renderer, which recognises the template and formats it in code; for the Qwen3 models
 both render ChatML. The output limit still matches because both sides count the same span of
@@ -160,8 +183,10 @@ meeting. A meeting needs at least one check of its own.
 ## Adding a case
 
 1. Choose the file: `cleanup` for general behaviour, `corrections` or `corrections-extended` for a
-   self-correction, `snippets` for snippets. Leave `holdout` alone while working on the prompt:
-   when a holdout case fails, fix the general pattern and add a similar case to another suite.
+   self-correction, `snippets` for snippets. Don't add to `holdout` or `unseen` while working on
+   the rules or the prompt: when one of their cases fails, fix the general pattern and add a
+   similar case to another suite. New `unseen` cases come only from someone who hasn't seen the
+   prompt, written against a frozen prompt, as a new set (see [Where the cases come from](#where-the-cases-come-from)).
 2. Write the `input` as the speaker would say it and the `intent` as they meant it. Assert what
    matters: the corrected fact with `must` or `must_any`, the abandoned one with `must_not`, and
    the words that have to survive. Prefer short substrings that hold under fair formatting
@@ -199,9 +224,15 @@ the scripts: `make evals-test`, and `make lint`, which runs [ruff](https://docs.
 Mac, or `python3 -m pip install --user pipx`). Without pipx, `uvx ruff@0.17.1 check evals` runs
 the same version.
 
+Most of those tests replace `quietype-cli` with stand-ins. `tests/test_cli_contract.py` runs the
+real binary instead, through `prep`, `budget`, `finish`, blank and malformed lines, so a change to
+the JSON protocol on either side fails there. It skips when `quietype-cli` isn't built (`make
+evals-test` builds it first) unless `QUIETYPE_CLI` names the binary; CI's Linux job sets it after
+building `quietype-cli`, so there the tests can't skip.
+
 ## Current results
 
-Qwen3 4B Instruct 2507 Q4_K_M on llama.cpp b11351 (Metal, MacBook Air M2), default (smart) cleanup mode, run 2026-10-21:
+Qwen3 4B Instruct 2507 Q4_K_M on llama.cpp b11351 (Metal, MacBook Air M2), default (smart) cleanup mode, run 2026-10-22:
 
 | Suite | Passed | Known failures |
 | --- | --- | --- |
@@ -209,10 +240,15 @@ Qwen3 4B Instruct 2507 Q4_K_M on llama.cpp b11351 (Metal, MacBook Air M2), defau
 | corrections | 45/46 | `keep-reported-speech` |
 | corrections-extended | 22/25 | `ext-part-rephrase-mid`, `ext-keep-my-bad-apology`, `ext-list-take-off` |
 | holdout | 52/60 | `holdout-minus-olives`, `holdout-rm-groceries-walnuts`, `holdout-partial-restart-mom`, `holdout-fast-bloodwork`, `holdout-garage-tools`, `holdout-shelf-boards`, `holdout-sitter-bedtime`, `holdout-brake-job` |
+| unseen | 23/30 | `unseen-stutter-price`, `unseen-rm-eggs`, `unseen-rm-hiring`, `unseen-rm-muffin`, `unseen-rm-bob`, `unseen-keep-reported`, `unseen-chain-room` |
 | snippets | 12/12 | none |
 | meetings | 33/33 checks | none |
 
-The failures fall into four groups: take-backs the model leaves in ("minus the olives", "cross
+The `unseen` suite was run once against the frozen prompt, and its misses were recorded as they
+came. Most are removals said without a pause ("a muffin and a bagel minus the muffin", "take out
+bob" with no comma before it), which the rules pass doesn't send to the model; the others are a
+partial-word stutter ("p p price"), a chained correction where the model kept the first fix only,
+and reported speech the model rewrote. The other suites' failures fall into four groups: take-backs the model leaves in ("minus the olives", "cross
 out the water"), wordings the rules pass doesn't yet send to the model ("that should be", "I
 retract that"), restarts where the model also drops the greeting before them ("Hi Mom, I wanted
 to ask if you, um, let me rephrase that"), and ordinary text read as a correction ("she said

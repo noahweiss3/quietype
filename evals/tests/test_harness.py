@@ -103,6 +103,26 @@ class BaselineTests(unittest.TestCase):
                 with self.assertRaises(HarnessError):
                     harness.load_baselines()
 
+    def test_load_rejects_falsy_lists_and_totals_of_the_wrong_type(self):
+        # Values that an "if value:" check would wave through as an empty list.
+        for key in ("known_failures", "flaky"):
+            for value in (None, 0, "", {}, False):
+                with self.subTest(key=key, value=value):
+                    self.write({"suite": {"total": 1, "known_failures": [], key: value}})
+                    with self.assertRaisesRegex(HarnessError, f"suite.{key}"):
+                        harness.load_baselines()
+        for total in (None, 0.0, False, -1, [], 1.5):
+            with self.subTest(total=total):
+                self.write({"suite": {"total": total, "known_failures": []}})
+                with self.assertRaisesRegex(HarnessError, "total must be a whole number"):
+                    harness.load_baselines()
+
+    def test_load_accepts_empty_lists_and_a_missing_flaky_list(self):
+        self.write({"suite": {"total": 0, "known_failures": []},
+                    "other": {"total": 2, "known_failures": [], "flaky": []}})
+        baselines = harness.load_baselines(["suite", "other"])
+        self.assertEqual(baselines["suite"], {"total": 0, "known_failures": [], "flaky": []})
+
     def test_update_records_failures_and_keeps_flaky_cases(self):
         self.write({"suite": {"total": 2, "known_failures": [], "flaky": ["b", "gone"]},
                     "other": {"total": 1, "known_failures": []}})

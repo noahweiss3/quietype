@@ -1,10 +1,13 @@
 """Malformed inputs that must stop the run with a HarnessError rather than a Python exception or a
 mismatch with what quietype-cli accepts. No model or quietype-cli needed."""
 
+import contextlib
 import copy
+import io
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -13,7 +16,7 @@ from test_meetings import GOOD as GOOD_MEETING  # noqa: E402
 
 import run_evals  # noqa: E402
 import run_meeting_notes as notes  # noqa: E402
-from harness import HarnessError  # noqa: E402
+from harness import Answer, HarnessError  # noqa: E402
 
 MARKER = "\x1fMARK\x1f"
 
@@ -84,6 +87,105 @@ class ContentMarkerTests(unittest.TestCase):
 
     def test_no_fallback_copy_of_the_marker_is_kept(self):
         self.assertFalse(hasattr(run_evals, "CONTENT_MARKER"))
+
+
+class ChatServer(TemplateServer):
+    """A stand-in llama-server that counts characters as tokens and answers with `reply`."""
+
+    reply = "Call me at three."
+
+    def count_tokens(self, text):
+        return len(text)
+
+    def chat(self, messages, max_tokens):
+        return Answer(text=self.reply, max_tokens=max_tokens, truncated=False, seconds=0.0, tokens=4)
+
+
+class CliAnswerTests(unittest.TestCase):
+    """What run_suite does with quietype-cli answers that don't match what it asked for."""
+
+    CASES = [with_fields(id="c1"), with_fields(id="c2", input="Thanks for the deck.", must=["deck"])]
+
+    @staticmethod
+    def prep(item):
+        return {"id": item["id"], "rules_text": item["input"], "cues": ["correction"], "needs_llm": True,
+                "content_marker": MARKER,
+                "messages": [{"role": "system", "content": "Clean up."}, {"role": "user", "content": item["input"]}]}
+
+    def fake_cli(self, broken_command=None, broken=None):
+        """quietype-cli as a function; `broken` rewrites the answers of `broken_command`."""
+        def answer(command, items):
+            if command == "prep":
+                answers = [self.prep(i) for i in items]
+            elif command == "budget":
+                answers = [{"id": i["id"], "max_tokens": 64} for i in items]
+            else:
+                answers = [{"id": i["id"], "result": {"text": i.get("llm_output", i["input"]), "path": "llm"}}
+                           for i in items]
+            return broken(answers) if command == broken_command else answers
+        return answer
+
+    def run_suite(self, cli):
+        with mock.patch.object(run_evals, "cli", cli), contextlib.redirect_stdout(io.StringIO()):
+            return run_evals.run_suite("suite", self.CASES, ChatServer(), all_llm=False)
+
+    def assert_harness_error(self, command, broken, fragment):
+        with self.assertRaises(HarnessError) as caught:
+            self.run_suite(self.fake_cli(command, broken))
+        self.assertIn(f"quietype-cli {command}", str(caught.exception))
+        self.assertIn(fragment, str(caught.exception))
+
+    def test_well_formed_answers_are_scored(self):
+        report = self.run_suite(self.fake_cli())
+        self.assertEqual([(r["id"], r["output"], r["max_tokens"]) for r in report],
+                         [("c1", "Call me at three.", 64), ("c2", "Call me at three.", 64)])
+        self.assertEqual([r["ok"] for r in report], [True, False])
+
+    def test_a_missing_answer_is_a_harness_error(self):
+        for command in ("prep", "budget", "finish"):
+            with self.subTest(command=command):
+                self.assert_harness_error(command, lambda answers: answers[:1], "no result for c2")
+
+    def test_an_answer_nobody_asked_for_is_a_harness_error(self):
+        for command in ("prep", "budget", "finish"):
+            with self.subTest(command=command):
+                self.assert_harness_error(command, lambda answers: answers + [dict(answers[0], id="c9")],
+                                          "answered 'c9'")
+
+    def test_a_duplicate_answer_is_a_harness_error(self):
+        for command in ("prep", "budget", "finish"):
+            with self.subTest(command=command):
+                self.assert_harness_error(command, lambda answers: answers + answers[:1], "answered 'c1' twice")
+
+    def test_an_answer_without_an_id_is_a_harness_error(self):
+        for bad in ([], "c1", {"id": 1}, {"rules_text": "x"}):
+            with self.subTest(bad=bad):
+                self.assert_harness_error("prep", lambda answers, bad=bad: answers + [bad], "without an id")
+
+    def test_prep_fields_of_the_wrong_shape_are_harness_errors(self):
+        for key, value in (("rules_text", None), ("cues", "correction"), ("cues", [1]), ("needs_llm", "yes"),
+                           ("needs_llm", 1), ("messages", []), ("messages", [{"role": "user"}]),
+                           ("messages", [{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"}])):
+            with self.subTest(key=key, value=value):
+                self.assert_harness_error(
+                    "prep", lambda answers, key=key, value=value: [dict(answers[0], **{key: value})] + answers[1:],
+                    f"{key} for 'c1' must be")
+        self.assert_harness_error("prep", lambda answers: [{k: v for k, v in answers[0].items() if k != "cues"}]
+                                  + answers[1:], "cues for 'c1' must be")
+
+    def test_a_budget_that_isnt_a_positive_whole_number_is_a_harness_error(self):
+        for value in (None, 0, -5, 64.0, "64", True):
+            with self.subTest(value=value):
+                self.assert_harness_error(
+                    "budget", lambda answers, value=value: [dict(answers[0], max_tokens=value)] + answers[1:],
+                    "max_tokens for 'c1' must be")
+
+    def test_a_finish_result_without_text_or_path_is_a_harness_error(self):
+        for result in (None, "Call me at three.", {"text": "x"}, {"path": "llm"}, {"text": None, "path": "llm"}):
+            with self.subTest(result=result):
+                self.assert_harness_error(
+                    "finish", lambda answers, result=result: [dict(answers[0], result=result)] + answers[1:],
+                    "result for 'c1' must be")
 
 
 if __name__ == "__main__":
