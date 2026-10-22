@@ -5,15 +5,17 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>Murmur</string>
+    <string>Quietype</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.noahweiss.murmur</string>
+    <string>com.noahweiss.quietype</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Murmur</string>
+    <string>Quietype</string>
     <key>CFBundleDisplayName</key>
-    <string>Murmur</string>
+    <string>Quietype</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -25,7 +27,7 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Murmur records your voice while you hold the dictation key, or during meeting notes, and transcribes it on this Mac.</string>
+    <string>Quietype records your voice while you hold the dictation key, or during meeting notes, and transcribes it on this Mac.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

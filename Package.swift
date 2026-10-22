@@ -1,20 +1,20 @@
 // swift-tools-version:6.0
 import PackageDescription
 
-// MurmurCore and murmur-cli are portable (they build and test on Linux).
+// QuietypeCore and quietype-cli are portable (they build and test on Linux).
 // Everything that touches AppKit, CoreML or Metal is macOS-only and is added below.
 
 var products: [Product] = [
-    .library(name: "MurmurCore", targets: ["MurmurCore"]),
-    .executable(name: "murmur-cli", targets: ["murmur-cli"]),
+    .library(name: "QuietypeCore", targets: ["QuietypeCore"]),
+    .executable(name: "quietype-cli", targets: ["quietype-cli"]),
 ]
 
 var dependencies: [Package.Dependency] = []
 
 var targets: [Target] = [
-    .target(name: "MurmurCore"),
-    .executableTarget(name: "murmur-cli", dependencies: ["MurmurCore"]),
-    .testTarget(name: "MurmurCoreTests", dependencies: ["MurmurCore"]),
+    .target(name: "QuietypeCore"),
+    .executableTarget(name: "quietype-cli", dependencies: ["QuietypeCore"]),
+    .testTarget(name: "QuietypeCoreTests", dependencies: ["QuietypeCore"]),
 ]
 
 #if os(macOS)
@@ -23,8 +23,8 @@ dependencies.append(
 )
 
 products += [
-    .executable(name: "Murmur", targets: ["Murmur"]),
-    .executable(name: "murmur-bench", targets: ["murmur-bench"]),
+    .executable(name: "Quietype", targets: ["Quietype"]),
+    .executable(name: "quietype-bench", targets: ["quietype-bench"]),
 ]
 
 targets += [
@@ -35,24 +35,24 @@ targets += [
         checksum: "f2ce4a7923eca2ed8d0eaf6577429f2446ba6fd7a66b0efe02ea414a04fff3be"
     ),
     .target(
-        name: "MurmurKit",
+        name: "QuietypeKit",
         dependencies: [
-            "MurmurCore",
+            "QuietypeCore",
             "llama",
             .product(name: "FluidAudio", package: "FluidAudio"),
         ]
     ),
-    .executableTarget(name: "Murmur", dependencies: ["MurmurCore", "MurmurKit"]),
-    .executableTarget(name: "murmur-bench", dependencies: ["MurmurCore", "MurmurKit"]),
-    .testTarget(name: "MurmurKitTests", dependencies: ["MurmurKit"]),
+    .executableTarget(name: "Quietype", dependencies: ["QuietypeCore", "QuietypeKit"]),
+    .executableTarget(name: "quietype-bench", dependencies: ["QuietypeCore", "QuietypeKit"]),
+    .testTarget(name: "QuietypeKitTests", dependencies: ["QuietypeKit"]),
 ]
 #endif
 
 let package = Package(
-    name: "Murmur",
+    name: "Quietype",
     platforms: [.macOS(.v14)],
     products: products,
     dependencies: dependencies,
     targets: targets,
-    swiftLanguageModes: [.v5]
+    swiftLanguageModes: [.v6]
 )
