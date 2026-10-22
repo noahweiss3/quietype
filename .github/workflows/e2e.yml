@@ -72,7 +72,7 @@ jobs:
       # The runner's paravirtual GPU is far slower than its CPU for this.
       QUIETYPE_GPU_LAYERS: "0"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Same pinned revisions and checksums as CleanupModel in the app.
       - name: Pick the cleanup model
@@ -103,7 +103,7 @@ jobs:
       # Reuses the build cache that ci.yml saves (same key scheme). Restore only, so this job's
       # release-only .build never replaces it.
       - name: Restore .build
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build
           key: build-macos-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('Sources/**', 'Tests/**') }}
@@ -114,7 +114,7 @@ jobs:
       # folder on first use. The key follows Package.resolved because the FluidAudio version
       # decides which Parakeet files it fetches.
       - name: Cache models
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .models
