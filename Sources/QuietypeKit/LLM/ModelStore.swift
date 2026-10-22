@@ -52,9 +52,18 @@ public enum ModelStore {
         try await Downloader(file: partial, progress: progress).download(model.url)
         try verify(partial, against: model)
 
-        try? FileManager.default.removeItem(at: destination)
-        try FileManager.default.moveItem(at: partial, to: destination)
+        try install(partial, at: destination)
         return destination
+    }
+
+    /// Moves a verified file to `destination`. A file already there is swapped out in one step
+    /// that leaves it in place if the swap fails, so "Download Again" never ends with no model.
+    static func install(_ file: URL, at destination: URL) throws {
+        if FileManager.default.fileExists(atPath: destination.path) {
+            _ = try FileManager.default.replaceItemAt(destination, withItemAt: file)
+        } else {
+            try FileManager.default.moveItem(at: file, to: destination)
+        }
     }
 
     static func verify(_ file: URL, against model: CleanupModel) throws {

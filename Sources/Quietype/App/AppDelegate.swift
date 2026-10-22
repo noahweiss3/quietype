@@ -21,9 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             self.updateIcon(recording: recording, meeting: self.controller.meeting.isActive)
         }.store(in: &cancellables)
+        // `$state` delivers the new value before the property changes, so ask the value, not the controller.
         controller.meeting.$state.sink { [weak self] state in
             guard let self else { return }
-            self.updateIcon(recording: self.controller.isRecording, meeting: state == .recording || state == .finishing)
+            self.updateIcon(recording: self.controller.isRecording, meeting: state.isActive)
         }.store(in: &cancellables)
 
         controller.start()
@@ -71,8 +72,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let text = entry.result.text.replacingOccurrences(of: "\n", with: " ")
             let title = text.count > 60 ? String(text.prefix(60)) + "…" : text
             let row = item(title) { Paster.copy(entry.result.text) }
-            row.toolTip =
-                "Click to copy. \(String(format: "%.2f", entry.totalSeconds))s after release, \(entry.result.path.displayName)"
+            let seconds = String(format: "%.2f", entry.totalSeconds)
+            row.toolTip = "Click to copy. \(seconds)s after release, \(entry.result.path.displayName)"
             submenu.addItem(row)
         }
         if controller.history.isEmpty { submenu.addItem(disabled("Nothing yet")) }

@@ -38,14 +38,14 @@ public final class LlamaGenerator: TextGenerator, @unchecked Sendable {
         try session.removeTokens(from: 0)
         try session.decode(tokens, at: 0, allLogits: false)
         // Updated notes repeat much of the current notes, so drafting from the prompt pays off.
-        let (output, _, stop) = try session.generate(
+        let (output, stats) = try session.generate(
             first: session.argmax(at: -1),
             position: tokens.count,
             source: tokens,
             maxTokens: maxTokens,
             speculative: speculative
         )
-        guard stop == .endOfGeneration else { throw LlamaError.outputTruncated(maxTokens) }
+        guard stats.stop == .endOfGeneration else { throw LlamaError.outputTruncated(maxTokens) }
         return session.detokenize(output)
     }
 }

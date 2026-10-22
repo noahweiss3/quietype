@@ -77,8 +77,9 @@ private struct GeneralTab: View {
                             launchAtLoginError = nil
                         } catch {
                             launchAtLoginError = """
-                                Couldn't \(enabled ? "turn on" : "turn off") launch at login: \(error.localizedDescription) \
-                                You can change it in System Settings › General › Login Items.
+                                Couldn't \(enabled ? "turn on" : "turn off") launch at login: \
+                                \(error.localizedDescription) You can change it in System Settings › General › \
+                                Login Items.
                                 """
                             let actual = SMAppService.mainApp.status == .enabled
                             if actual != enabled {
@@ -198,7 +199,10 @@ private struct DictionaryTab: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Names and terms Quietype should spell your way. One per line.")
             Text(
-                "“Kubernetes” fixes spelling and casing. “cooper netties -> Kubernetes” replaces what the transcriber heard."
+                """
+                “Kubernetes” fixes spelling and casing. “cooper netties -> Kubernetes” replaces what the \
+                transcriber heard.
+                """
             )
             .font(.caption).foregroundStyle(.secondary)
             TextEditor(text: $settings.dictionaryText)
@@ -216,8 +220,8 @@ private struct SnippetsTab: View {
             Text("Say a trigger phrase and Quietype types the text instead.")
             Text(
                 """
-                Triggers work anywhere in a dictation and ignore case, punctuation and spacing. They match whole words, \
-                so pick phrases you won't say otherwise: “my LinkedIn link” rather than “address”.
+                Triggers work anywhere in a dictation and ignore case, punctuation and spacing. They match whole \
+                words, so pick phrases you won't say otherwise: “my LinkedIn link” rather than “address”.
                 """
             )
             .font(.caption).foregroundStyle(.secondary)

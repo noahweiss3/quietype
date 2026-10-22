@@ -122,7 +122,8 @@ public enum MeetingNotesPrompt {
         var content = "<notes>\n\(notes.isEmpty ? emptyNotes : notes)\n</notes>\n"
         if !names.isEmpty {
             content +=
-                "People named on the call: \(names.joined(separator: ", ")). Use these names instead of \"Others\" or \"Someone\".\n"
+                "People named on the call: \(names.joined(separator: ", ")). "
+                + "Use these names instead of \"Others\" or \"Someone\".\n"
         }
         content += "<transcript>\n\(newTranscript)\n</transcript>"
         if complete {
@@ -136,13 +137,14 @@ public enum MeetingNotesPrompt {
         if compact {
             content +=
                 "\nThe notes are getting long: merge related bullets into shorter ones, keep the Summary to at "
-                + "most 8 bullets and Open questions to at most 5, and keep every decision and action item that still stands."
+                + "most 8 bullets and Open questions to at most 5, and keep every decision and action item that "
+                + "still stands."
         }
         if retry {
             content +=
                 "\nYour last answer to this was cut off or not in the format above. Write much shorter notes: "
-                + "at most 5 Summary bullets and 3 Open questions, bullets of at most 10 words, and one action item per "
-                + "owner with that owner's tasks combined."
+                + "at most 5 Summary bullets and 3 Open questions, bullets of at most 10 words, and one action "
+                + "item per owner with that owner's tasks combined."
         }
         return [ChatMessage(role: "system", content: system), ChatMessage(role: "user", content: content)]
     }

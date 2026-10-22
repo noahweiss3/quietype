@@ -198,9 +198,9 @@ extension LlamaSession {
     /// Generates after a prompt already in the cache, whose last token predicted `first`.
     func generate(
         first: llama_token, position: Int, source: [llama_token], maxTokens: Int, speculative: Bool
-    ) throws -> (tokens: [llama_token], stats: DecodeStats, stop: GenerationStop) {
+    ) throws -> (tokens: [llama_token], stats: DecodeStats) {
         var greedy = LlamaGreedyModel(session: self)
-        let (tokens, stats) = try SpeculativeDecoder.generate(
+        return try SpeculativeDecoder.generate(
             model: &greedy,
             next: first,
             position: position,
@@ -208,7 +208,6 @@ extension LlamaSession {
             maxTokens: maxTokens,
             speculative: speculative
         )
-        return (tokens, stats, stats.stop)
     }
 }
 

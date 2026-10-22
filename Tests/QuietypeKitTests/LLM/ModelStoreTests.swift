@@ -57,6 +57,44 @@ final class ModelStoreTests: XCTestCase {
         }
     }
 
+    func testInstallMovesTheFileIntoAnEmptySpot() throws {
+        let directory = try makeDirectory()
+        let download = directory.appendingPathComponent("model.gguf.download")
+        let destination = directory.appendingPathComponent("model.gguf")
+        try Data("new".utf8).write(to: download)
+
+        try ModelStore.install(download, at: destination)
+
+        XCTAssertEqual(try Data(contentsOf: destination), Data("new".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: download.path))
+    }
+
+    func testInstallReplacesTheOldModel() throws {
+        let directory = try makeDirectory()
+        let download = directory.appendingPathComponent("model.gguf.download")
+        let destination = directory.appendingPathComponent("model.gguf")
+        try Data("old".utf8).write(to: destination)
+        try Data("new".utf8).write(to: download)
+
+        try ModelStore.install(download, at: destination)
+
+        XCTAssertEqual(try Data(contentsOf: destination), Data("new".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: download.path))
+        let left = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        XCTAssertEqual(left, ["model.gguf"], "no backup or temporary copy is left behind")
+    }
+
+    func testAFailedInstallKeepsTheOldModel() throws {
+        let directory = try makeDirectory()
+        let missing = directory.appendingPathComponent("model.gguf.download")
+        let destination = directory.appendingPathComponent("model.gguf")
+        try Data("old".utf8).write(to: destination)
+
+        XCTAssertThrowsError(try ModelStore.install(missing, at: destination))
+
+        XCTAssertEqual(try Data(contentsOf: destination), Data("old".utf8))
+    }
+
     func testModelURLPointsAtThePinnedFile() {
         XCTAssertEqual(
             CleanupModel.qwen3_4B.url.absoluteString,

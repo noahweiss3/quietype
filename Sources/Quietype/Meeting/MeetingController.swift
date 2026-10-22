@@ -12,6 +12,9 @@ final class MeetingController: ObservableObject {
         case recording
         case finishing
         case finished
+
+        /// From Start until the meeting is saved.
+        var isActive: Bool { self == .starting || self == .recording || self == .finishing }
     }
 
     /// How a finished meeting ended up on disk.
@@ -57,6 +60,9 @@ final class MeetingController: ObservableObject {
     private var writer: MeetingNotesWriter?
     private var feeders: [Task<Void, Never>] = []
     private var ticker: Task<Void, Never>?
+    /// The notes pass the ticker started, if one is still running. It runs apart from the ticker
+    /// so slow inference can't hold up autosaving.
+    private var notesRefresh: Task<Void, Never>?
     private var lastNotesUpdate = Date()
     private var notesFailures = 0
     private var lastSave = Date.distantPast
@@ -70,7 +76,7 @@ final class MeetingController: ObservableObject {
         self.transcriber = transcriber
     }
 
-    var isActive: Bool { state == .starting || state == .recording || state == .finishing }
+    var isActive: Bool { state.isActive }
 
     static var folder: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -110,8 +116,10 @@ final class MeetingController: ObservableObject {
         var sources = 0
         if Permissions.microphoneDenied {
             warn(
-                "Microphone access is off, so only the call is transcribed. Turn it on in System Settings › Privacy & Security › Microphone."
-            )
+                """
+                Microphone access is off, so only the call is transcribed. Turn it on in System Settings › \
+                Privacy & Security › Microphone.
+                """)
         } else if !stopRequested {
             do {
                 let mic = try microphone.start()
@@ -201,6 +209,8 @@ final class MeetingController: ObservableObject {
             return
         }
         transcript = await session.finish()
+        // The last stretches were transcribed after the ticker stopped; report a failure among them.
+        await reportTranscriptionError(from: session)
         self.session = nil
         if let writer {
             isUpdatingNotes = true
@@ -260,16 +270,28 @@ final class MeetingController: ObservableObject {
         warn(
             speaker == .me
                 ? "Your microphone stopped, so the rest of the meeting only has the call's side."
-                : "Call audio stopped (sharing ended or the display changed), so the rest of the meeting only has your side."
+                : """
+                Call audio stopped (sharing ended or the display changed), so the rest of the meeting only has \
+                your side.
+                """
         )
     }
 
     private func tick() async {
-        await refreshNotesIfDue()
-        if let session, let error = await session.takeError() {
+        if notesRefresh == nil {
+            notesRefresh = Task {
+                await refreshNotesIfDue()
+                notesRefresh = nil
+            }
+        }
+        if let session { await reportTranscriptionError(from: session) }
+        autosave()
+    }
+
+    private func reportTranscriptionError(from session: MeetingSession) async {
+        if let error = await session.takeError() {
             warn("Some speech couldn't be transcribed: \(error)")
         }
-        autosave()
     }
 
     /// Folds new talk into the notes when the schedule says it's time.

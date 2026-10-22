@@ -12,6 +12,17 @@ final class MeetingSessionTests: XCTestCase {
         }
     }
 
+    /// Transcribes the first stretch and fails on every later one.
+    private actor FailingAfterFirstTranscriber: SpeechTranscriber {
+        struct Failure: Error {}
+        var calls = 0
+        func transcribe(_ samples: [Float]) async throws -> String {
+            calls += 1
+            if calls > 1 { throw Failure() }
+            return "first"
+        }
+    }
+
     private func feed(_ session: MeetingSession, _ audio: [Float], from speaker: MeetingSpeaker) async {
         for start in stride(from: 0, to: audio.count, by: 4800) {
             await session.append(Array(audio[start..<min(audio.count, start + 4800)]), from: speaker)
@@ -61,6 +72,22 @@ final class MeetingSessionTests: XCTestCase {
         await feed(session, tone(4), from: .others)
         let transcript = await session.finish()
         XCTAssertEqual(transcript.segments.first?.start ?? 0, 1.3, accuracy: 0.05)
+    }
+
+    func testAFailureInTheFinalDrainIsReportedAfterFinish() async {
+        let fake = FailingAfterFirstTranscriber()
+        let session = MeetingSession(transcriber: fake)
+        // The first stretch closes at the pause; the second is still open, so finish() queues it.
+        await feed(session, tone(4) + silence(1) + tone(4), from: .me)
+        let transcript = await session.finish()
+
+        let calls = await fake.calls
+        XCTAssertEqual(calls, 2)
+        XCTAssertEqual(transcript.segments.map(\.text), ["first"])
+        let error = await session.takeError()
+        XCTAssertEqual(error, "\(FailingAfterFirstTranscriber.Failure())")
+        let again = await session.takeError()
+        XCTAssertNil(again, "an error is reported once")
     }
 
     func testReportsEachNewSegment() async {

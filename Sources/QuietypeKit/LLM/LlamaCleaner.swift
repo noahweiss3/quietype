@@ -19,7 +19,8 @@ public final class LlamaCleaner: TextCleaner, @unchecked Sendable {
         public var decode = DecodeStats()
         public var prefillSeconds = 0.0
         public var generateSeconds = 0.0
-        public var stop = GenerationStop.endOfGeneration
+        /// Whether the answer ended on its own or was cut off at the token limit.
+        public var stop: GenerationStop { decode.stop }
     }
 
     public let model: CleanupModel
@@ -46,8 +47,8 @@ public final class LlamaCleaner: TextCleaner, @unchecked Sendable {
     public var lastStats: Stats { state.withLock { $0.lastStats } }
 
     /// Time to evaluate 8 tokens at once divided by the time for 1, measured at load.
-    /// Speculation only pays off when a small batch costs about the same as a single token,
-    /// which holds on Apple Silicon GPUs but not on, say, a virtual machine's GPU.
+    /// Speculation only pays off when a small batch costs about the same as a single token. That
+    /// depends on the GPU (on an M2 Air it doesn't), so it is measured rather than assumed.
     public let batchCostRatio: Double
     public var speculationPaysOff: Bool { batchCostRatio < 2.0 }
 
@@ -163,7 +164,7 @@ public final class LlamaCleaner: TextCleaner, @unchecked Sendable {
         stats.prefillSeconds = Date().timeIntervalSince(prefillStart)
 
         let generateStart = Date()
-        let (tokens, decodeStats, stop) = try session.generate(
+        let (tokens, decodeStats) = try session.generate(
             first: first,
             position: prefixLength + suffix.count,
             source: suffix,
@@ -173,7 +174,6 @@ public final class LlamaCleaner: TextCleaner, @unchecked Sendable {
         stats.generateSeconds = Date().timeIntervalSince(generateStart)
         stats.outputTokens = tokens.count
         stats.decode = decodeStats
-        stats.stop = stop
         state.withLock { [stats] in $0.lastStats = stats }
         return (session.detokenize(tokens), stats)
     }
