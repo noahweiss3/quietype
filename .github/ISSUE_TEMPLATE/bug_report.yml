@@ -1,0 +1,90 @@
+name: Bug report
+description: Something in Quietype doesn't work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Dictations can contain personal details, so check anything you paste below before you submit.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: For a transcription or cleanup problem, include what you said and what Quietype typed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. In Settings, set cleanup to ...
+        2. Hold the dictation key and say "..."
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: "15.5"
+    validations:
+      required: true
+
+  - type: input
+    id: mac-model
+    attributes:
+      label: Mac model and chip
+      placeholder: MacBook Air, M2, 16 GB
+    validations:
+      required: true
+
+  - type: input
+    id: quietype-version
+    attributes:
+      label: Quietype version or commit
+      description: The version shown by Get Info on Quietype.app, or `git rev-parse --short HEAD` if you built it from source.
+      placeholder: 0.1.0 or a1b2c3d
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cleanup-mode
+    attributes:
+      label: Cleanup mode
+      options:
+        - Rules only (no LLM)
+        - "Smart: LLM only when needed"
+        - Always use the LLM
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cleanup-model
+    attributes:
+      label: Cleanup model
+      options:
+        - Qwen3 4B Instruct (recommended)
+        - Qwen3 1.7B (faster)
+        - None (rules only)
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or History entry
+      description: |
+        For a wrong transcription or cleanup, copy the entry from the History tab in Settings: the text, the raw transcript (right-click > Copy Raw Transcript) and the timing line under it, which shows how the dictation was processed.
+        For a crash, paste the crash report or the relevant lines from Console.app (search for "Quietype").
+      render: text

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security issue
+    url: https://github.com/noahweiss3/quietype/security/policy
+    about: Report vulnerabilities privately as described in the security policy, not in a public issue.

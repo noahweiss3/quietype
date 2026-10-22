@@ -1,120 +1,146 @@
-# Runs the cleanup evals (rules + prompt + guard through murmur-cli) against the recommended
-# cleanup model on a Linux runner, using llama.cpp's server on the CPU. Results are printed to
-# the log as JSON lines and uploaded as an artifact.
+# Runs the cleanup and meeting-notes evals (evals/README.md) against the app's recommended model,
+# with llama.cpp's server on the runner's CPU. The job fails when the harness errors or a case or
+# check fails that evals/baselines.json doesn't list as a known failure. Scores appear on the
+# run's summary page, and every result, with a manifest of how it was made, is uploaded as an
+# artifact.
 name: Cleanup evals
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - evals/**
+      - Sources/QuietypeCore/**
+      - Sources/quietype-cli/**
+      - Package.swift
+      - Package.resolved
+      - .github/workflows/evals.yml
   push:
     branches: [main]
     paths:
       - evals/**
-      - Sources/MurmurCore/**
-      - Sources/murmur-cli/**
-      - Tests/MurmurCoreTests/**
+      - Sources/QuietypeCore/**
+      - Sources/quietype-cli/**
+      - Package.swift
+      - Package.resolved
       - .github/workflows/evals.yml
 
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the run it replaces. Runs on main always finish.
 concurrency:
-  group: evals-${{ github.ref }}
-  cancel-in-progress: true
+  group: evals-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  tests:
-    name: Core tests (Linux)
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - run: swift test
-
   evals:
     name: Evals ${{ matrix.suite }} (Qwen3 4B, llama.cpp CPU)
     runs-on: ubuntu-24.04
+    # The same Swift toolchain as the Linux job in ci.yml.
+    container: swift:6.4
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         suite: [cleanup, notes]
     env:
-      # Same model and llama.cpp release the app uses.
-      MODEL_URL: https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
-      MODEL: ${{ github.workspace }}/.models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+      # The model the app recommends, and the llama.cpp release the app links (Package.swift).
+      # Same pinned revision and checksum as CleanupModel.qwen3_4B in the app.
+      MODEL_URL: https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+      MODEL_SHA256: 3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597
+      # Relative to the checkout: in a container job, github.workspace is the host's path.
+      MODEL: .models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
       LLAMA_TAG: b11351
+      # Recorded in each result's manifest; the server doesn't report its backend.
+      QUIETYPE_EVAL_BACKEND: llama.cpp CPU (AVX2, FMA, F16C), static build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/cache@v4
+      # The swift image has clang but no cmake, make, Python or curl.
+      - name: Install tools
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            ca-certificates cmake curl make python3
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          python3 --version
+
+      - name: Cache model
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .models
           key: eval-models-qwen3-4b-2507-q4km
 
-      - uses: actions/cache@v4
+      - name: Cache llama-server
         id: llama-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .llama
-          key: llama-server-${{ env.LLAMA_TAG }}-avx2-static
+          key: llama-server-${{ env.LLAMA_TAG }}-avx2-static-swift6.4
+
+      # Dependencies come before sources in the key, so a change to sources alone still restores
+      # the resolved packages.
+      - name: Cache .build
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .build
+          key: build-linux-swift6.4-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('Sources/**') }}
+          restore-keys: |
+            build-linux-swift6.4-${{ hashFiles('Package.swift', 'Package.resolved') }}-
 
       - name: Build llama-server
         if: steps.llama-cache.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 --branch "$LLAMA_TAG" https://github.com/ggml-org/llama.cpp "$RUNNER_TEMP/llama.cpp"
-          cmake -S "$RUNNER_TEMP/llama.cpp" -B "$RUNNER_TEMP/llama-build" -DCMAKE_BUILD_TYPE=Release \
+          CC=clang CXX=clang++ cmake -S "$RUNNER_TEMP/llama.cpp" -B "$RUNNER_TEMP/llama-build" -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF -DLLAMA_CURL=OFF -DGGML_NATIVE=OFF -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON
           cmake --build "$RUNNER_TEMP/llama-build" --target llama-server -j "$(nproc)"
           mkdir -p .llama && cp "$RUNNER_TEMP/llama-build/bin/llama-server" .llama/
 
+      # Downloaded to a temporary name first, so an interrupted download is never cached.
       - name: Download model
         run: |
           mkdir -p .models
-          [ -f "$MODEL" ] || curl -sSL --fail -o "$MODEL" "$MODEL_URL"
+          if [ ! -f "$MODEL" ]; then
+            curl -sSL --fail --retry 3 -o "$MODEL.part" "$MODEL_URL"
+            echo "$MODEL_SHA256  $MODEL.part" | shasum -a 256 -c -
+            mv "$MODEL.part" "$MODEL"
+          fi
           ls -la .models
 
-      - name: Build murmur-cli
-        run: swift build --product murmur-cli
+      - name: Build quietype-cli
+        run: swift build --product quietype-cli
 
       - name: Start llama-server
         run: |
-          nproc
+          .llama/llama-server --version || true
           .llama/llama-server -m "$MODEL" --jinja -c 8192 -np 1 -t "$(nproc)" --port 8080 > "$RUNNER_TEMP/server.log" 2>&1 &
-          for i in $(seq 1 120); do
-            curl -sf http://127.0.0.1:8080/health && break
+          for _ in $(seq 1 120); do
+            curl -sf http://127.0.0.1:8080/health > /dev/null && break
             sleep 2
           done
-          curl -sf http://127.0.0.1:8080/health || (cat "$RUNNER_TEMP/server.log"; exit 1)
+          curl -sf http://127.0.0.1:8080/health || { cat "$RUNNER_TEMP/server.log"; exit 1; }
 
-      - name: Existing cases (smart mode)
+      - name: Cleanup suites
         if: matrix.suite == 'cleanup'
-        run: python3 evals/run_evals.py --label cases --print-json || true
+        run: python3 evals/run_evals.py --all --check-baseline --print-json
 
-      - name: Correction cases
-        if: matrix.suite == 'cleanup'
-        run: python3 evals/run_evals.py --cases evals/corrections.jsonl --label corrections --print-json || true
-
-      - name: Held-out correction cases
-        if: matrix.suite == 'cleanup' && hashFiles('evals/corrections_holdout.jsonl') != ''
-        run: python3 evals/run_evals.py --cases evals/corrections_holdout.jsonl --label holdout --print-json || true
-
-      - name: Second held-out set
-        if: matrix.suite == 'cleanup' && hashFiles('evals/corrections_holdout2.jsonl') != ''
-        run: python3 evals/run_evals.py --cases evals/corrections_holdout2.jsonl --label holdout2 --print-json || true
-
-      - name: More correction cases
-        if: matrix.suite == 'cleanup' && hashFiles('evals/corrections_more.jsonl') != ''
-        run: python3 evals/run_evals.py --cases evals/corrections_more.jsonl --label more --print-json || true
-
-      - name: Third held-out set
-        if: matrix.suite == 'cleanup' && hashFiles('evals/corrections_holdout3.jsonl') != ''
-        run: python3 evals/run_evals.py --cases evals/corrections_holdout3.jsonl --label holdout3 --print-json || true
-
-      - name: Snippet cases
-        if: matrix.suite == 'cleanup'
-        run: python3 evals/run_evals.py --cases evals/snippets.jsonl --label snippets --print-json || true
-
-      - name: Live meeting notes
+      - name: Meeting notes
         if: matrix.suite == 'notes'
-        run: python3 evals/run_meeting_notes.py --print-json || true
+        run: python3 evals/run_meeting_notes.py --check-baseline --print-json
 
-      - uses: actions/upload-artifact@v4
+      - name: Server log
+        if: failure()
+        run: tail -n 100 "$RUNNER_TEMP/server.log"
+
+      - name: Upload results
         if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: eval-results-${{ matrix.suite }}
           path: evals/results/
+          if-no-files-found: ignore

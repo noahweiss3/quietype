@@ -1,9 +1,26 @@
+# Swift / Xcode
 .build/
 .swiftpm/
 *.xcodeproj/
+xcuserdata/
+
+# Build output (scripts/build-app.sh)
 build/
-dist/
+
+# Models, audio and llama.cpp builds downloaded or made locally and in CI
+.models/
+.audio/
+.llama/
+*.gguf
+
+# Evals
 evals/.cache/
 evals/results/
+
+# Python
 __pycache__/
+
+# Editors and OS
+.vscode/
+.idea/
 .DS_Store

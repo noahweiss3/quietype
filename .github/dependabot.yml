@@ -1,0 +1,16 @@
+# llama.cpp is a binaryTarget pinned by URL and checksum in Package.swift. Dependabot doesn't
+# track those, so bump it by hand (and the matching LLAMA_TAG in evals.yml).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: swift
+    directory: /
+    schedule:
+      interval: monthly

@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest something Quietype should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the situation and what gets in your way today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Quietype to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've tried
+      description: Workarounds, settings, or other apps you've used for this.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Example dictations, screenshots, or links to how other tools handle it.

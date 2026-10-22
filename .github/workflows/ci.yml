@@ -1,3 +1,13 @@
+# Runs on every pull request and every push to main.
+#
+#   linux  Checks Swift formatting, then tests QuietypeCore and quietype-cli, the portable part
+#          of the package.
+#   macos  Builds every product, runs the model-free tests and bundles an ad-hoc signed
+#          Quietype.app that you can download from the run's summary page.
+#   evals  Lints the eval scripts and tests the eval harness itself, without a model.
+#
+# The model-backed tests run in e2e.yml and the cleanup evals in evals.yml, because both need
+# multi-gigabyte model downloads.
 name: CI
 
 on:
@@ -5,15 +15,94 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the run it replaces. Runs on main always finish, so every
+# commit there keeps a result.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  core:
+  linux:
     name: Core tests (Linux)
     runs-on: ubuntu-24.04
+    # The same image contributors use locally (CONTRIBUTING.md), so results match.
+    container: swift:6.4
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - run: swift --version
-      - run: swift test
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Show toolchain
+        run: swift --version
+
+      # swift format ships with the toolchain and reads .swift-format; `make format` fixes what it flags.
+      - name: Check formatting
+        run: swift format lint --strict -r Sources Tests Package.swift
+
+      # Package.swift only declares QuietypeCore, quietype-cli and their tests off macOS.
+      - name: Test
+        run: swift test
+
+  evals:
+    name: Eval harness (lint and tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Lint
+        run: pipx run ruff==0.17.1 check evals
+
+      - name: Test
+        run: python3 -m unittest discover -s evals/tests -v
+
+  macos:
+    name: Build and test (macOS)
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Show toolchain
+        id: toolchain
+        run: |
+          swift --version
+          sw_vers
+          echo "hash=$(swift --version 2>&1 | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      # A .build left by a different compiler can fail with module-format errors, so the key
+      # starts with the toolchain. Dependencies come next, so a change to sources alone still
+      # restores the resolved packages and the llama.cpp framework.
+      - name: Cache .build
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .build
+          key: build-macos-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('Sources/**', 'Tests/**') }}
+          restore-keys: |
+            build-macos-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
+
+      - name: Build all products (release)
+        run: swift build -c release
+
+      # QuietypeKitTests compile here too, but skip themselves without QUIETYPE_TEST_MODEL.
+      - name: Test (model-free)
+        run: swift test --filter QuietypeCoreTests
+
+      - name: Bundle Quietype.app
+        run: scripts/build-app.sh
+
+      # ditto keeps the framework symlinks and the code signature, which a plain zip breaks.
+      - name: Zip Quietype.app
+        run: ditto -c -k --keepParent build/Quietype.app build/Quietype.zip
+
+      # Ad-hoc signed and not notarized: macOS asks you to approve it under
+      # System Settings > Privacy & Security the first time you open it.
+      - name: Upload Quietype.app
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Quietype-app
+          path: build/Quietype.zip
+          if-no-files-found: error
+          retention-days: 14
