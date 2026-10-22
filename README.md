@@ -9,6 +9,7 @@
 Hold a key, talk, let go. Clean text appears wherever your cursor is.<br>
 Speech recognition and LLM cleanup both run on your Mac, so nothing you say is sent anywhere.
 
+[![Latest release](https://img.shields.io/github/v/release/noahweiss3/quietype)](https://github.com/noahweiss3/quietype/releases/latest)
 [![CI](https://github.com/noahweiss3/quietype/actions/workflows/ci.yml/badge.svg)](https://github.com/noahweiss3/quietype/actions/workflows/ci.yml)
 [![Cleanup evals](https://github.com/noahweiss3/quietype/actions/workflows/evals.yml/badge.svg)](https://github.com/noahweiss3/quietype/actions/workflows/evals.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -52,7 +53,17 @@ Speech recognition and LLM cleanup both run on your Mac, so nothing you say is s
 
 ## Install
 
-**Requirements:** an Apple Silicon Mac (M1 or later) on macOS 14 or later, Xcode 16 or later to build, and about 3 GB of disk for models. 16 GB of RAM is recommended for the default 4B cleanup model; the 1.7B model works with 8 GB.
+**Requirements:** an Apple Silicon Mac (M1 or later) on macOS 14 or later, and about 3 GB of disk for models. 16 GB of RAM is recommended for the default 4B cleanup model; the 1.7B model works with 8 GB.
+
+### Download the latest release
+
+1. Download `Quietype-<version>.zip` from the [latest release](https://github.com/noahweiss3/quietype/releases/latest). To check the download, get the `.sha256` file next to it and run `shasum -a 256 -c Quietype-<version>.zip.sha256`.
+2. Unzip it and move `Quietype.app` to `/Applications`.
+3. Open it. The app is ad-hoc signed, not notarized, so the first time macOS refuses to open it: go to System Settings › Privacy & Security, click *Open Anyway* next to the message about Quietype, and confirm.
+
+### Build from source
+
+Building needs Xcode 16 or later.
 
 ```sh
 git clone https://github.com/noahweiss3/quietype.git
@@ -60,19 +71,19 @@ cd quietype
 make run
 ```
 
-`make run` builds `build/Quietype.app` and opens it. Quietype lives in the menu bar. On first launch:
+`make run` builds `build/Quietype.app` and opens it. Move it to `/Applications` to keep it and launch it at login.
+
+### First launch
+
+Quietype lives in the menu bar. The first time it runs:
 
 1. **Microphone:** allow it when asked.
 2. **Accessibility:** needed for the global hotkey and for pasting. Click *Grant…* in Settings, then enable Quietype in System Settings › Privacy & Security › Accessibility.
 3. **Speech model:** Parakeet downloads and compiles automatically, which takes about a minute the first time.
 4. **Cleanup model:** click *Download Qwen3 4B Instruct (recommended)* in Settings (2.5 GB).
 
-Move `build/Quietype.app` to `/Applications` to keep it and launch it at login.
-
-**Prebuilt app.** There is no release yet. Every [CI run on `main`](https://github.com/noahweiss3/quietype/actions/workflows/ci.yml?query=branch%3Amain) uploads an ad-hoc signed `Quietype.zip` as the run's `Quietype-app` artifact, kept for 14 days (downloading it needs a GitHub account). It isn't notarized, so the first time you open it macOS asks you to approve it under System Settings › Privacy & Security.
-
 > [!NOTE]
-> macOS ties the Accessibility permission to the app's code signature, and the default ad-hoc signature changes on every build. After rebuilding, re-grant it, or build with a stable identity: `QUIETYPE_SIGN_IDENTITY="Apple Development: you@example.com" make app`.
+> macOS ties the Accessibility permission to the app's code signature, and an ad-hoc signature changes with every build. After installing a new release or rebuilding, grant it again. When building yourself, a stable identity avoids that: `QUIETYPE_SIGN_IDENTITY="Apple Development: you@example.com" make app`.
 
 ## Usage
 
@@ -100,6 +111,7 @@ The key can be changed to Right ⌘, Right ⌃ or Fn/🌐 in Settings.
 
 - **Cleanup mode:** *Smart* (default) runs the LLM only when the transcript needs it. *Always* runs it on every dictation. *Rules only* never uses the LLM for dictation (meeting notes still load it).
 - **Cleanup model:** Qwen3 4B Instruct (best quality) or Qwen3 1.7B (smaller and faster, weaker on subtle corrections).
+- **Speculative decoding:** on by default. It never changes the output, and Quietype only uses it on Macs where it measures a speed-up (see [How it works](#how-it-works)); Settings says when it is inactive.
 - **Speech model:** Parakeet Ultra (most accurate, 25 languages), Parakeet v2 (English) or Phonon-2 (English, fastest, macOS 15+). Cleanup rules and prompts are written for English.
 - **Dictionary:** one term per line. `Kubernetes` fixes spelling and casing; `cooper netties -> Kubernetes` replaces a mishearing.
 - **History:** recent dictations with the raw transcript, the cleaned text and per-stage timings. On by default; turn off *Keep history* to stop saving new dictations.
@@ -122,11 +134,11 @@ flowchart LR
 
 Most of the speed comes from avoiding work rather than doing it faster:
 
-1. **Transcribe while you talk.** The recording is split at pauses and finished stretches are transcribed in the background, so at release only the stretch since your last pause is left. That keeps the wait flat however long you speak, as long as you pause now and then and transcription keeps up: one long stretch with no pause is transcribed in full at release, and any earlier stretch still queued behind a slow transcription adds to the wait.
+1. **Transcribe while you talk.** The recording is split at pauses and finished stretches are transcribed in the background, so at release only the stretch since your last pause is left, however long you spoke.
 2. **Skip the LLM when it isn't needed.** A deterministic rules pass removes fillers, stutters and standalone "start over". The LLM runs only when the transcript contains a cue: a correction ("scratch that", "no wait", "I mean"), a list ("first… second…", "bullet point"), a formatting command ("new paragraph", "comma") or a filler the rules can't safely remove ("you know", "like").
 3. **Cache the prompt.** The system prompt and few-shot examples are evaluated once when the model loads. Each dictation evaluates only its own text.
-4. **Speculative decoding from the input.** Cleanup output is mostly a copy of the input, so the decoder proposes upcoming tokens straight from the dictation and verifies up to 12 at once. Output is identical to plain greedy decoding (`quietype-bench --compare` checks this). It only saves time on GPUs where checking a batch of tokens costs little more than checking one, so Quietype times a batch when the model loads and switches speculation off everywhere else. It was off on the M2 Air behind the numbers below.
-5. **Guard the output.** If the LLM answers the dictation instead of cleaning it ("write me a poem" → a poem), invents content, or returns nothing for no reason, Quietype pastes the rules-pass text instead.
+4. **Guard the output.** A heuristic guard catches the common ways the LLM goes wrong: answering the dictation instead of cleaning it ("write me a poem" → a poem), adding many words that weren't said, or dropping nearly everything. Quietype then pastes the rules-pass text instead.
+5. **Speculative decoding.** The decoder can draft upcoming tokens from the dictation itself and verify several at once, with output identical to plain greedy decoding. Quietype measures at load whether that pays off on your GPU; on the M2 Air below it didn't, so it was off.
 
 **Stage timings** from `quietype-bench`, with both models loaded before timing:
 
@@ -137,26 +149,27 @@ Most of the speed comes from avoiding work rather than doing it faster:
 | "Let's do the call at 2, no wait, 3 PM." | 2.8 s | LLM | 57 ms | 565 ms |
 | "…three things. First, a venue. Second, catering…" | 9.7 s | LLM, list | 95 ms | 1,654 ms |
 
-<sub>Per-stage timings, not key-release-to-paste latency. One run per clip on a MacBook Air (M2, 16 GB); [method and how to reproduce](docs/benchmarks.md#stage-timings).</sub>
+<sub>One run per clip on a MacBook Air (M2, 16 GB). [What is and isn't timed, and how to reproduce](docs/benchmarks.md#stage-timings).</sub>
 
 The full design, module boundaries and extension points are in [docs/architecture.md](docs/architecture.md).
 
 ## Quality
 
-Cleanup quality is measured by eval suites that run the app's own rules, prompt and guard (through `quietype-cli`) against a llama.cpp server. CI runs them on every change to the cleanup code and fails if any suite drops below its recorded baseline.
+Cleanup quality is measured by eval suites that run the app's own rules, prompt and guard (through `quietype-cli`) against a llama.cpp server. CI runs them on every change to the cleanup code and fails if any case fails that isn't a recorded known failure in [`evals/baselines.json`](evals/baselines.json).
 
 | Suite | Cases | What it covers | Qwen3 4B |
 |---|---:|---|---:|
 | [Cleanup](evals/cases/cleanup.jsonl) | 35 | Fillers, corrections, "start over", lists, formatting commands, prompt injection, per-app style, vocabulary | **35/35** |
 | [Corrections](evals/cases/corrections.jsonl) | 46 | Taking things back, replacements, additions, chained revisions, and look-alikes that must be left alone | **45/46** |
 | [Corrections, extended](evals/cases/corrections-extended.jsonl) | 25 | Less common wordings ("strike X", "swap X for Y"), corrections after a filler, two revisions in one sentence | **22/25** |
-| [Holdout](evals/cases/holdout.jsonl) | 60 | Corrections never used while tuning the prompt | **52/60** |
+| [Holdout](evals/cases/holdout.jsonl) | 60 | Corrections written without seeing the prompt; now regression cases (see below) | **52/60** |
+| [Unseen](evals/cases/unseen.jsonl) | 30 | Dictations written by someone who hadn't seen the prompt, against a frozen prompt | **23/30** |
 | [Snippets](evals/cases/snippets.jsonl) | 12 | Snippet expansion through the whole pipeline, including corrections between snippets | **12/12** |
 | [Meeting notes](evals/meetings) | 33 checks | Two replayed meetings, checked with fixture assertions: expected names, tasks and phrases appear in the right section (and abandoned proposals don't), and every live update succeeds | **33/33** |
 
-<sub>Run 2026-10-21 on a MacBook Air (M2, 16 GB) at temperature 0. The meeting checks are substring assertions, not an accuracy score. [Setup and how to reproduce](docs/benchmarks.md#eval-scores).</sub>
+<sub>Run 2026-10-22 on a MacBook Air (M2, 16 GB) at temperature 0. [Setup, caveats and how to reproduce](docs/benchmarks.md#eval-scores).</sub>
 
-The holdout suite exists to catch a prompt that has overfitted to the other suites. See [evals/README.md](evals/README.md) for the case format and how to run everything yourself.
+The cleanup, corrections and snippets suites were written alongside the rules and the prompt. The holdout cases were written without seeing the prompt and their text never went into it, but misses on earlier rounds of them informed general prompt changes, so they now serve as regression cases. The unseen suite is the clean measure: its cases were written against a frozen prompt by someone who hadn't seen it. [evals/README.md](evals/README.md#where-the-cases-come-from) has the details, the case format and how to run everything yourself.
 
 ## Privacy
 

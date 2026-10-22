@@ -28,7 +28,7 @@ flowchart LR
 | `QuietypeCore` | macOS, Linux | Every decision about text and timing: the rules pass, cue detection, the cleanup prompt, the output guard, speculative decoding, the hotkey state machine, pause segmentation, live transcription, snippets, the personal dictionary, meeting transcripts and the live-notes writer. No AppKit, no models. |
 | `QuietypeKit` | macOS | Adapters that implement `QuietypeCore` protocols with real models: `ParakeetTranscriber` (`SpeechTranscriber`), `LlamaCleaner` (`TextCleaner`), `LlamaGenerator` (`TextGenerator`), plus model downloads (`ModelStore`). |
 | `Quietype` | macOS | The menu bar app: global hotkey, microphone and system-audio capture, the recording HUD, pasting, settings, history and the meeting window. |
-| `quietype-cli` | macOS, Linux | A JSON-lines front end over `QuietypeCore` so the [evals](../evals/README.md) run the app's exact rules, prompt and guard against any llama.cpp server. One step differs: the server renders the chat template with `--jinja`, while the app uses llama.cpp's built-in matcher (`llama_chat_apply_template` in `QuietypeKit/LLM/LlamaSession.swift`), and the two renderings aren't checked to be byte-identical. |
+| `quietype-cli` | macOS, Linux | A JSON-lines front end over `QuietypeCore` so the [evals](../evals/README.md) run the app's exact rules, prompt and guard against any llama.cpp server. The chat template is rendered by different code there; [evals/README.md](../evals/README.md#the-chat-template) explains. |
 | `quietype-bench` | macOS | Runs the pipeline headless on audio files or text and prints per-stage timings (transcription left at the end of the input, LLM prefill and generation), not key-release-to-paste latency. `--compare` checks that speculative decoding produces the same output as plain greedy decoding, and `--expect` fails the run when a transcript or cleanup misses the expected words (the End-to-end workflow uses both). |
 
 ## Dictation pipeline
@@ -124,8 +124,8 @@ Everything that needs a model or hardware sits behind a small protocol in `Quiet
 
 | You want to… | Change | Then |
 |---|---|---|
-| Recognise a new spoken correction or command | `Rules.swift` (cue patterns or a deterministic rule) | Add a unit test in `Tests/QuietypeCoreTests/Cleanup/` and eval cases in `evals/cases/` |
-| Change how the LLM rewrites text | `CleanupPrompt.swift` (instructions or examples) | Run the full eval suite; the holdout set catches overfitting |
+| Recognise a new spoken correction or command | `Cleanup/Cues.swift` for cue patterns and the command lists, `Cleanup/Rules.swift` for a deterministic rule | Add a unit test in `Tests/QuietypeCoreTests/Cleanup/` and eval cases in `evals/cases/` |
+| Change how the LLM rewrites text | `CleanupPrompt.swift` (instructions or examples) | Run every eval suite. A change made for an unseen miss turns that suite into a regression suite ([why](../evals/README.md#where-the-cases-come-from)) |
 | Loosen or tighten the safety net | `OutputGuard.swift` | Add accept and reject cases to `OutputGuardTests` |
 | Style text for another app | `AppStyles.defaults` (bundle id → `WritingStyle`) | |
 | Offer another cleanup model | `CleanupModel.all` | Run the evals with that model and note the score in `evals/README.md` |

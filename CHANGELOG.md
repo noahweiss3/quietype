@@ -4,7 +4,9 @@ All notable changes to Quietype are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
-Nothing has been released or tagged yet. This is what the first release will contain.
+## [0.1.0] - 2026-10-22
+
+The first release.
 
 ### Dictation
 
@@ -30,4 +32,5 @@ Nothing has been released or tagged yet. This is what the first release will con
 - `quietype-cli` and eval suites that run the app's real cleanup pipeline against any llama.cpp server.
 - `quietype-bench` for per-stage timings of the headless pipeline.
 
-[Unreleased]: https://github.com/noahweiss3/quietype/commits/main
+[Unreleased]: https://github.com/noahweiss3/quietype/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/noahweiss3/quietype/releases/tag/v0.1.0

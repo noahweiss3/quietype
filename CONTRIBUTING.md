@@ -23,13 +23,13 @@ Run `make help` to see every task. The ones you'll use most:
 | Command | What it does |
 |---|---|
 | `make build` | Debug build of every target |
-| `make test` | `QuietypeCore` unit tests. Fast, no models needed |
+| `make test` | Every unit test that needs no model; the model-backed `QuietypeKit` tests skip |
 | `make app` | Release build bundled and signed as `build/Quietype.app` |
 | `make cli` | Builds `quietype-cli`, which the evals use |
 | `make evals` | Runs every cleanup suite and the meeting-notes evals and prints each case, for exploring (needs a llama.cpp server, see below) |
 | `make evals-check` | Runs the cleanup and meeting-notes evals against their baselines, the same check CI applies |
 | `make bench` | Builds `quietype-bench` for latency measurements |
-| `make evals-test` | Unit tests for the eval scripts themselves. No model needed |
+| `make evals-test` | Builds `quietype-cli`, then runs the unit tests for the eval scripts themselves. No model needed |
 | `make lint` | Checks Swift formatting with `swift format`, then lints the eval scripts with the same pinned ruff as CI (needs `pipx`) |
 | `make format` | Formats the Swift code in place, the way `make lint` and CI expect it |
 
@@ -37,13 +37,13 @@ Run `make help` to see every task. The ones you'll use most:
 
 ## Tests
 
-`QuietypeCore` holds all the logic that can be tested without a Mac, and its tests run on macOS and Linux:
+`make test` runs every test target, as CI does on macOS:
 
 ```sh
 make test
 ```
 
-On Linux, or to reproduce the Linux CI job from a Mac with Docker:
+`QuietypeCore` holds all the logic that can be tested without a Mac, and its tests also run on Linux. On Linux, or to reproduce the Linux CI job from a Mac with Docker:
 
 ```sh
 docker run --rm -v "$PWD":/src -w /src swift:6.4 swift test --scratch-path /tmp/build
@@ -51,11 +51,10 @@ docker run --rm -v "$PWD":/src -w /src swift:6.4 swift test --scratch-path /tmp/
 
 Use Swift 6.4 or later on Linux: earlier toolchains have an XCTest bug on arm64 that can hang a test run at random.
 
-`QuietypeKitTests` load a real cleanup model, so they skip unless you point them at one:
+Some `QuietypeKitTests` need no model either, such as the download checks in `ModelStoreTests`, and run with `make test`. The ones that load a real cleanup model skip unless you point them at one:
 
 ```sh
-QUIETYPE_TEST_MODEL=~/Library/Application\ Support/Quietype/Models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf \
-  swift test --filter QuietypeKitTests
+QUIETYPE_TEST_MODEL=~/Library/Application\ Support/Quietype/Models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf make test-model
 ```
 
 Set `QUIETYPE_TEST_MODEL_ID=qwen3-1.7b` when testing the smaller model.
@@ -101,7 +100,7 @@ None of these are needed for normal use. They change how the app, the tests or t
 | `QUIETYPE_GPU_LAYERS` | The app, `quietype-bench`, `QuietypeKitTests` | How many layers of the cleanup model llama.cpp offloads to the GPU (meeting notes share the same model). Defaults to all of them; `0` keeps it on the CPU, which CI uses because the runner's virtual GPU is slower. |
 | `QUIETYPE_TEST_MODEL` | `QuietypeKitTests` | Path to a cleanup model GGUF. The model-backed tests skip when it isn't set. |
 | `QUIETYPE_TEST_MODEL_ID` | `QuietypeKitTests` | Which cleanup model `QUIETYPE_TEST_MODEL` is (`qwen3-4b-instruct-2507` by default, or `qwen3-1.7b`). It picks the matching chat prefill, so it must match the file. |
-| `QUIETYPE_CLI` | The eval scripts | Path to the `quietype-cli` binary. Defaults to `.build/debug/quietype-cli`. |
+| `QUIETYPE_CLI` | The eval scripts and their tests | Path to the `quietype-cli` binary. Defaults to `.build/debug/quietype-cli`. When set, the contract tests in `evals/tests/test_cli_contract.py` fail instead of skipping if it's missing. |
 | `QUIETYPE_EVAL_BACKEND` | The eval scripts | A free-text label, such as `llama.cpp Metal`, recorded in each result's manifest, because the server doesn't report whether it runs on the CPU or the GPU. |
 
 ## Code guidelines
@@ -119,7 +118,11 @@ None of these are needed for normal use. They change how the app, the tests or t
 3. Write commit subjects as `area: what changed`, in the imperative and lowercase, for example `rules: treat "strike that" as a retraction` or `notes: retry with a shorter answer`.
 4. Run `make test`, plus `make evals-check` if you touched cleanup or notes behaviour, and fill in the pull request template.
 
-CI runs the core tests on Linux and macOS, builds the app, and runs the evals when cleanup code changes.
+CI runs the core tests on Linux, every model-free test on macOS, builds the app, runs the evals when cleanup code changes, and runs the end-to-end checks when the code a dictation passes through changes.
+
+## Releases
+
+A release is a tag. Set the new version as `CFBundleShortVersionString` (and bump `CFBundleVersion`) in `Resources/Info.plist`, turn `[Unreleased]` in `CHANGELOG.md` into a section for the version with its date and links, then push a tag such as `v0.2.0`. `.github/workflows/release.yml` builds and tests the app, and publishes `Quietype-<version>.zip` with its SHA-256 and that CHANGELOG section as the notes. It refuses a tag that doesn't match `Info.plist` or has no CHANGELOG section.
 
 ## Reporting bugs
 

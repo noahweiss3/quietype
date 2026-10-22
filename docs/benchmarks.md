@@ -23,9 +23,11 @@ The rules pass, dictionary, snippets and the paste itself are not timed.
 
 The eval suites run the app's own rules, prompt and output guard through `quietype-cli` against a llama.cpp server. [evals/README.md](../evals/README.md) describes the suites, the case format and how each case is scored.
 
-**Setup.** Run 2026-10-21 on a MacBook Air (M2, 16 GB): Qwen3 4B Instruct 2507 Q4_K_M served by `llama-server` built from llama.cpp b11351 (the same release the app embeds and CI uses) on Metal, smart cleanup mode, temperature 0.
+**Setup.** Run 2026-10-22 on a MacBook Air (M2, 16 GB): Qwen3 4B Instruct 2507 Q4_K_M served by `llama-server` built from llama.cpp b11351 (the same release the app embeds and CI uses) on Metal, smart cleanup mode, temperature 0.
 
-**How the evals differ from the app.** The server renders the chat template with `--jinja`, while the app uses llama.cpp's built-in template matcher (`llama_chat_apply_template`). Both read the template from the model file, but the two code paths are not guaranteed to produce byte-identical prompts. [evals/README.md](../evals/README.md#how-a-case-runs) lists the other differences.
+**How the evals differ from the app.** A few steps run differently, most notably the chat template, which the server and the app render with different code. [evals/README.md](../evals/README.md#how-a-case-runs) lists the differences.
+
+**Which score measures generalization.** Only the unseen suite was written against a frozen prompt by someone who hadn't seen it. The holdout cases have informed general prompt changes, so they count as regression cases; [evals/README.md](../evals/README.md#where-the-cases-come-from) explains.
 
 **What the meeting score means.** The 33 meeting checks are substring assertions on two replayed meetings: expected names, tasks and phrases appear in the right section, abandoned proposals don't, and every live update succeeds. They catch regressions on those fixtures; they are not a general accuracy score.
 
