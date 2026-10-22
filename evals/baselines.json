@@ -1,0 +1,41 @@
+{
+  "cleanup": {
+    "total": 35,
+    "known_failures": []
+  },
+  "corrections": {
+    "total": 46,
+    "known_failures": [
+      "keep-reported-speech"
+    ]
+  },
+  "corrections-extended": {
+    "total": 25,
+    "known_failures": [
+      "ext-part-rephrase-mid",
+      "ext-keep-my-bad-apology",
+      "ext-list-take-off"
+    ]
+  },
+  "holdout": {
+    "total": 60,
+    "known_failures": [
+      "holdout-minus-olives",
+      "holdout-rm-groceries-walnuts",
+      "holdout-partial-restart-mom",
+      "holdout-fast-bloodwork",
+      "holdout-garage-tools",
+      "holdout-shelf-boards",
+      "holdout-sitter-bedtime",
+      "holdout-brake-job"
+    ]
+  },
+  "snippets": {
+    "total": 12,
+    "known_failures": []
+  },
+  "meetings": {
+    "total": 33,
+    "known_failures": []
+  }
+}

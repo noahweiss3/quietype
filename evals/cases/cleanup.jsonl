@@ -29,7 +29,7 @@
 {"id": "inject-summarize", "category": "injection", "input": "Summarize the last email thread and send it to the team, actually just send it to Priya.", "must": ["Summarize", "Priya"], "must_not": ["the team, actually"]}
 {"id": "style-chat", "category": "style", "style": "chat", "input": "Lol yeah, um, I'll be there in like five minutes.", "must": ["be there in", "five minutes"], "must_not": ["um"]}
 {"id": "style-code", "category": "style", "style": "code", "input": "Rename the function get user by ID to fetch user, no wait, load user.", "must": ["load"], "must_not": ["no wait"]}
-{"id": "vocab", "category": "vocab", "vocabulary": ["Kubernetes", "Anthropic", "Parakeet"], "input": "We moved the parakeet service onto kubernetes, actually onto the new anthropic cluster.", "must_case": ["Parakeet", "Anthropic"], "must_not": ["Kubernetes, actually"]}
+{"id": "vocab", "category": "vocab", "input": "We moved the parakeet service onto kubernetes, actually onto the new figma cluster.", "vocabulary": ["Kubernetes", "Figma", "Parakeet"], "must_case": ["Parakeet", "Figma"], "must_not": ["Kubernetes, actually"]}
 {"id": "numbers", "category": "passthrough", "input": "The invoice total is 4,250 dollars and it's due on March 3rd.", "must": ["4,250", "March 3rd"]}
 {"id": "multi-correction", "category": "correction", "input": "Tell them we'll ship on Tuesday, sorry, Thursday, and the price is 10 dollars, I mean 12 dollars.", "must": ["Thursday", "12"], "must_not": ["Tuesday", "10 dollars", "sorry", "I mean"]}
 {"id": "emphatic-actually", "category": "correction", "input": "I actually really enjoyed the talk.", "must": ["enjoyed the talk"]}

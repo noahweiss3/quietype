@@ -1,0 +1,6 @@
+# Lint settings for the eval scripts: `make lint`, or `ruff check evals`.
+line-length = 120
+target-version = "py39"  # evals/README.md promises Python 3.9 or later
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
