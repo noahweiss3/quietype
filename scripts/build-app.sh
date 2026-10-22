@@ -9,7 +9,7 @@
 #   QUIETYPE_SIGN_IDENTITY="Apple Development: you@example.com" scripts/build-app.sh
 #
 # Environment:
-#   CONFIG                 SwiftPM build configuration: release (default) or debug.
+#   CONFIG                   SwiftPM build configuration: release (default) or debug.
 #   QUIETYPE_SIGN_IDENTITY   Code-signing identity. Defaults to "-", an ad-hoc signature.
 #
 # macOS ties Accessibility and Microphone permission to the app's signature. An ad-hoc signature

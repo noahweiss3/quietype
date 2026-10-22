@@ -1,7 +1,7 @@
 # Shortcuts for common tasks. Run `make` to list them.
 
 .DEFAULT_GOAL := help
-.PHONY: help build test test-all cli app run bench evals evals-check evals-test lint format clean
+.PHONY: help build test test-model cli app run bench evals evals-check evals-test lint format clean
 
 help: ## List the targets
 	@echo "Usage: make <target>"
@@ -11,10 +11,13 @@ help: ## List the targets
 build: ## Debug build of every product
 	swift build
 
-test: ## Run the model-free tests (QuietypeCoreTests)
-	swift test --filter QuietypeCoreTests
+# Without QUIETYPE_TEST_MODEL only the model-backed QuietypeKit tests skip, as in CI.
+test: ## Run every test that needs no model
+	swift test
 
-test-all: ## Run every test; model tests skip unless QUIETYPE_TEST_MODEL=/path/to/model.gguf
+# Fails rather than letting the model-backed tests skip when no model is given.
+test-model: ## Run every test, including the model-backed ones (needs QUIETYPE_TEST_MODEL=/path/to/model.gguf)
+	@test -n "$$QUIETYPE_TEST_MODEL" || { echo "set QUIETYPE_TEST_MODEL to a cleanup model GGUF"; exit 2; }
 	swift test
 
 cli: ## Build quietype-cli (debug), which the evals call
@@ -38,7 +41,8 @@ evals-check: cli ## The CI gate: fail only on cases that aren't known failures i
 	@status=0; python3 evals/run_evals.py --all --check-baseline || status=1; \
 	python3 evals/run_meeting_notes.py --check-baseline || status=1; exit $$status
 
-evals-test: ## Test the eval harness itself (no model needed)
+# Builds quietype-cli first so the contract tests run the real binary instead of skipping.
+evals-test: cli ## Test the eval harness itself (no model needed)
 	python3 -m unittest discover -s evals/tests
 
 # swift format comes with the toolchain and reads .swift-format. Ruff is the version CI pins

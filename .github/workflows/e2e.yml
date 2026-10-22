@@ -4,9 +4,13 @@
 # next to the audio, that no cleanup errors or is cut off, and that speculative decoding gives
 # the same answers as plain decoding.
 #
-# Pull requests and pushes to main that touch the embedded model code run it with Qwen3 1.7B
-# (about 1.5 GB of models, around 20 minutes). A weekly run uses the 4B model the app
-# recommends, and a manual run from the Actions tab can pick either.
+# Pull requests and pushes to main that touch what it exercises run it with Qwen3 1.7B (about
+# 1.5 GB of models, around 20 minutes): the macOS adapters and their tests, the bench, and the
+# QuietypeCore code a dictation passes through (audio segmenting, cleanup rules, prompt and guard,
+# the dictation pipeline, speculative decoding, dictionary and snippets). QuietypeCore's Hotkey
+# and Meeting code is left out on purpose: nothing here runs it, and ci.yml tests it. A weekly
+# run uses the 4B model the app recommends, and a manual run from the Actions tab can pick
+# either.
 name: End-to-end (macOS)
 
 on:
@@ -14,6 +18,12 @@ on:
     paths:
       - Sources/QuietypeKit/**
       - Sources/quietype-bench/**
+      - Tests/QuietypeKitTests/**
+      - Sources/QuietypeCore/Audio/**
+      - Sources/QuietypeCore/Cleanup/**
+      - Sources/QuietypeCore/Dictation/**
+      - Sources/QuietypeCore/LLM/**
+      - Sources/QuietypeCore/Text/**
       - Package.swift
       - Package.resolved
       - .github/workflows/e2e.yml
@@ -22,6 +32,12 @@ on:
     paths:
       - Sources/QuietypeKit/**
       - Sources/quietype-bench/**
+      - Tests/QuietypeKitTests/**
+      - Sources/QuietypeCore/Audio/**
+      - Sources/QuietypeCore/Cleanup/**
+      - Sources/QuietypeCore/Dictation/**
+      - Sources/QuietypeCore/LLM/**
+      - Sources/QuietypeCore/Text/**
       - Package.swift
       - Package.resolved
       - .github/workflows/e2e.yml
@@ -123,7 +139,9 @@ jobs:
 
       # Each clip's expectations sit next to the words it says. An entry in a list may be a list
       # of alternatives, since the transcript or the model can spell a number either way.
-      # quietype-bench --help describes the format.
+      # quietype-bench --help describes the format. The superseded "two" is ruled out in both
+      # spellings, and the list must come out as one: an item at the start of its own line, as a
+      # numbered ("1. ") or bulleted ("- ") line, which is how the prompt asks for lists.
       - name: Make test audio
         run: |
           mkdir -p .audio
@@ -139,11 +157,14 @@ jobs:
             },
             ".audio/correction.wav": {
               "transcript": ["call", ["three", "3"]],
-              "output": ["call", ["three", "3"]], "output_not": ["no wait", "two"]
+              "output": ["call", ["three", "3"]], "output_not": ["no wait", "two", "2"]
             },
             ".audio/list.wav": {
               "transcript": ["venue", "catering", "projector"],
-              "output": ["venue", "catering", "projector", "calendar invite"]
+              "output": [
+                "venue", "catering", "projector", "calendar invite",
+                ["\n1. ", "\n- "], ["\n2. ", "\n- "], ["\n3. ", "\n- "]
+              ]
             },
             "text0": {"output": ["Wednesday"], "output_not": ["Monday", "scratch that"]},
             "text1": {"output": ["previous instructions", "banana"]}

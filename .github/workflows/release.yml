@@ -1,0 +1,104 @@
+# Publishes a GitHub release when a version tag is pushed:
+#
+#   git tag -a v0.1.0 -m "Quietype 0.1.0" && git push origin v0.1.0
+#
+# It builds and tests the app with the same steps as ci.yml's macos job, from a clean checkout
+# (no build cache), zips Quietype.app and attaches the zip and its SHA-256 to the release, with
+# that version's section of CHANGELOG.md as the notes. The tag must match the version in
+# Resources/Info.plist and CHANGELOG.md must have a section for it, or nothing is published.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+# Never cancel a release halfway; a second run for the same tag waits for the first.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-15
+    timeout-minutes: 45
+    permissions:
+      contents: write # creates the release and uploads its files
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Checked first, so a mistyped tag fails in seconds rather than after the build.
+      - name: Check the version
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          if [ "$version" != "$bundle" ]; then
+            echo "::error::tag $GITHUB_REF_NAME doesn't match CFBundleShortVersionString $bundle in Resources/Info.plist"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # The notes are the lines between "## [<version>]" and the next heading or the link
+      # references at the end of the file, followed by how to install an unnotarized app.
+      - name: Write the release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          notes="$RUNNER_TEMP/notes.md"
+          awk -v v="$VERSION" '
+            /^## \[/ { if (found) exit; found = index($0, "## [" v "]") == 1; next }
+            /^\[[^]]+\]: / { if (found) exit }
+            found
+          ' CHANGELOG.md > "$notes"
+          if ! grep -q '[^[:space:]]' "$notes"; then
+            echo "::error::CHANGELOG.md has no section for [$VERSION]"
+            exit 1
+          fi
+          cat >> "$notes" <<EOF
+
+          ### Installing
+
+          Unzip \`Quietype-$VERSION.zip\` and move \`Quietype.app\` to \`/Applications\`. The app is ad-hoc signed and not notarized, so the first time you open it macOS refuses: go to System Settings › Privacy & Security and click *Open Anyway*. To check the download, run \`shasum -a 256 -c Quietype-$VERSION.zip.sha256\` in the folder that holds both files.
+          EOF
+          cat "$notes"
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          sw_vers
+
+      - name: Build all products (release)
+        run: swift build -c release
+
+      # As in ci.yml: only the model-backed QuietypeKit tests skip without QUIETYPE_TEST_MODEL.
+      - name: Test (model-free)
+        run: swift test
+
+      - name: Bundle Quietype.app
+        run: scripts/build-app.sh
+
+      # ditto keeps the framework symlinks and the code signature, which a plain zip breaks.
+      - name: Zip and checksum Quietype.app
+        working-directory: build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          ditto -c -k --keepParent Quietype.app "Quietype-$VERSION.zip"
+          shasum -a 256 "Quietype-$VERSION.zip" | tee "Quietype-$VERSION.zip.sha256"
+
+      # A version with a suffix, such as 0.2.0-rc.1, is published as a pre-release.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" \
+            "build/Quietype-$VERSION.zip" "build/Quietype-$VERSION.zip.sha256" \
+            --verify-tag --title "Quietype $VERSION" --notes-file "$RUNNER_TEMP/notes.md" ${prerelease:+"$prerelease"}
