@@ -1,152 +1,230 @@
-# Murmur
+<div align="center">
 
-Fast dictation for macOS that runs entirely on your Mac. Hold a key, talk, let go, and cleaned-up text appears wherever your cursor is.
+<img src="docs/assets/logo.svg" width="128" height="128" alt="Quietype app icon">
 
-- **Transcription:** NVIDIA Parakeet on the Neural Engine (via [FluidAudio](https://github.com/FluidInference/FluidAudio))
-- **Cleanup:** a local LLM (Qwen3 4B Instruct via [llama.cpp](https://github.com/ggml-org/llama.cpp)) that removes fillers, applies "scratch that" / "no wait" / "not the wings" / "start over", and formats lists
-- **Snippets:** say "my LinkedIn" and your profile URL is typed instead
-- **Meeting notes:** transcribes your mic and the call's audio live, and keeps notes (summary, decisions, action items) up to date as you talk
-- **Private:** no audio or text leaves the machine. The only network access is the one-time model downloads.
+# Quietype
 
-## How it works
+**Dictation for macOS that keeps quiet.**
 
-```
-key down ─▶ mic (16 kHz) ─▶ pause detector ─▶ Parakeet on finished stretches, while you talk
-key up   ─▶ Parakeet on the last stretch ─▶ rules pass ─▶ LLM (only if needed) ─▶ guard ─▶ ⌘V
-```
+Hold a key, talk, let go. Clean text appears wherever your cursor is.<br>
+Speech recognition and LLM cleanup both run on your Mac, so nothing you say is sent anywhere.
 
-Most of the speed comes from avoiding work rather than doing it faster:
+[![CI](https://github.com/noahweiss3/quietype/actions/workflows/ci.yml/badge.svg)](https://github.com/noahweiss3/quietype/actions/workflows/ci.yml)
+[![Cleanup evals](https://github.com/noahweiss3/quietype/actions/workflows/evals.yml/badge.svg)](https://github.com/noahweiss3/quietype/actions/workflows/evals.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)
+![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-M1%2B-black)
+![Swift 6 toolchain](https://img.shields.io/badge/Swift-6%20toolchain-F05138?logo=swift&logoColor=white)
 
-1. **Transcribe while you talk.** Recording is split at pauses, and finished stretches are transcribed in the background. When you release the key, only the last few seconds are left.
-2. **Skip the LLM when it isn't needed.** A deterministic rules pass removes "um"/"uh", stutters and standalone "start over". The LLM runs only when the transcript contains a cue: corrections ("scratch that", "no wait", "I mean"), lists ("first… second…", "bullet point"), formatting commands ("new paragraph") or soft fillers ("you know", "like"). Plain sentences paste at transcription speed.
-3. **Cache the prompt.** The system prompt and examples (~1,100 tokens) are evaluated once when the model loads. Each dictation only evaluates its own text.
-4. **Speculative decoding from the input.** Cleanup output is mostly a copy of the input, so the decoder proposes upcoming tokens straight from the dictation and verifies up to 12 at once. Output is identical to normal greedy decoding (`murmur-bench --compare` checks this) but needs fewer forward passes. It only pays off when checking a small batch costs about the same as one token, which is true on Apple Silicon GPUs. So at load time Murmur times a 1-token pass against an 8-token pass and turns speculation off if batching is expensive.
-5. **Guard the output.** If the LLM answers the dictation instead of cleaning it ("write me a poem" → a poem), adds many new words, or returns nothing for no reason, Murmur pastes the rules-pass text instead.
+[Features](#features) · [Install](#install) · [Usage](#usage) · [How it works](#how-it-works) · [Quality](#quality) · [Contributing](#contributing)
 
-## Requirements
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/demo-dark.svg">
+  <img src="docs/assets/demo-light.svg" width="100%" alt="Illustration: hold Right Option, say a sentence with a correction, let go, and Quietype pastes the cleaned-up text">
+</picture>
 
-- Apple Silicon Mac (M1 or later), macOS 14+. 16 GB RAM recommended for the 4B cleanup model.
-- Xcode 16 or later (or its Command Line Tools) to build.
-- About 3 GB of disk for models: Parakeet ~0.5 GB, Qwen3 4B 2.5 GB.
+<sub>An illustration of the workflow, not a screen recording.</sub>
 
-## Build and run
+</div>
+
+| You say | Quietype types |
+|---|---|
+| "Um, so I think we should, uh, push the launch to next week." | So I think we should push the launch to next week. |
+| "Let's do the call at 2, **no wait**, 3 PM." | Let's do the call at 3 PM. |
+| "I want pizza and wings, **scrap that, not the wings**." | I want pizza. |
+| "Groceries: **first** eggs, **second** milk, **third** bread. **Scratch the bread.** Fourth coffee." | Groceries:<br>1. Eggs<br>2. Milk<br>3. Coffee |
+| "Are we still on for lunch **question mark**" | Are we still on for lunch? |
+| "Send them **my LinkedIn**, **no wait**, my GitHub." | Send them https://github.com/jlee. |
+
+<sub>Each row is a case from the [eval suites](evals/README.md) and the output Quietype produced for it with the default Qwen3 4B model.</sub>
+
+## Features
+
+- **Fully on-device.** NVIDIA Parakeet transcribes on the Neural Engine and a Qwen3 model cleans up text with llama.cpp on the GPU. Quietype never sends your audio or text anywhere; it only goes online to download models.
+- **Fast where it matters.** Speech is transcribed while you are still talking, so letting go of the key usually only waits for the stretch since your last pause. Plain sentences skip the LLM entirely and paste at transcription speed.
+- **Understands how people actually talk.** Removes fillers and stutters, and applies spoken corrections: "no wait", "scratch that", "I mean", "not the wings", "start over".
+- **Formats as you speak.** Numbered and bulleted lists, "new paragraph", spoken punctuation.
+- **Writes for the app you're in.** No stray period in editors and terminals. When the LLM runs (in Smart mode, only for dictations that need it), it also keeps chat casual in Slack and Messages, writes full sentences in Mail, and leaves identifiers exactly as spoken in code.
+- **Snippets.** Say a trigger like "my LinkedIn" or "my email signature" anywhere in a sentence and the stored text is pasted verbatim.
+- **Personal dictionary.** Teach it names and jargon, or map a mishearing (`cooper netties -> Kubernetes`).
+- **Live meeting notes.** Transcribes your microphone and the call's audio, with no bot joining the call, and keeps a running summary, decisions, action items and open questions as you talk.
+- **Measured, not guessed.** Cleanup behaviour is pinned by unit tests and by eval suites that run the app's real pipeline against a local LLM in CI.
+
+## Install
+
+**Requirements:** an Apple Silicon Mac (M1 or later) on macOS 14 or later, Xcode 16 or later to build, and about 3 GB of disk for models. 16 GB of RAM is recommended for the default 4B cleanup model; the 1.7B model works with 8 GB.
 
 ```sh
-git clone https://github.com/noahweiss3/murmur.git
-cd murmur
-scripts/build-app.sh
-open build/Murmur.app
+git clone https://github.com/noahweiss3/quietype.git
+cd quietype
+make run
 ```
 
-On first launch:
+`make run` builds `build/Quietype.app` and opens it. Quietype lives in the menu bar. On first launch:
 
-1. **Microphone:** allow when asked.
-2. **Accessibility:** needed for the global hotkey and for pasting. Click *Grant…* in the settings window, then turn Murmur on in System Settings › Privacy & Security › Accessibility.
-3. **Speech model:** Parakeet downloads and compiles automatically (about a minute the first time).
-4. **Cleanup model:** click *Download Qwen3 4B Instruct* in Settings.
+1. **Microphone:** allow it when asked.
+2. **Accessibility:** needed for the global hotkey and for pasting. Click *Grant…* in Settings, then enable Quietype in System Settings › Privacy & Security › Accessibility.
+3. **Speech model:** Parakeet downloads and compiles automatically, which takes about a minute the first time.
+4. **Cleanup model:** click *Download Qwen3 4B Instruct (recommended)* in Settings (2.5 GB).
 
-Copy `build/Murmur.app` to `/Applications` if you want it to persist and launch at login.
+Move `build/Quietype.app` to `/Applications` to keep it and launch it at login.
 
-> **Rebuilding resets Accessibility.** macOS ties the permission to the app's code signature, and the default ad-hoc signature changes on every build. Either re-grant it after a rebuild, or sign with a stable identity: `MURMUR_SIGN_IDENTITY="Apple Development: …" scripts/build-app.sh`. A free Apple Development certificate from Xcode works, as does a self-signed code-signing certificate made in Keychain Access.
+**Prebuilt app.** There is no release yet. Every [CI run on `main`](https://github.com/noahweiss3/quietype/actions/workflows/ci.yml?query=branch%3Amain) uploads an ad-hoc signed `Quietype.zip` as the run's `Quietype-app` artifact, kept for 14 days (downloading it needs a GitHub account). It isn't notarized, so the first time you open it macOS asks you to approve it under System Settings › Privacy & Security.
 
-The *macOS* GitHub workflow also uploads a built `Murmur.app` as an artifact. It's ad-hoc signed, so after unzipping run `xattr -cr Murmur.app` before opening.
+> [!NOTE]
+> macOS ties the Accessibility permission to the app's code signature, and the default ad-hoc signature changes on every build. After rebuilding, re-grant it, or build with a stable identity: `QUIETYPE_SIGN_IDENTITY="Apple Development: you@example.com" make app`.
 
-## Using it
+## Usage
 
-| Action | What happens |
+| Action | Result |
 |---|---|
 | Hold **Right Option** | Records while held, pastes on release |
 | Double-tap **Right Option** | Hands-free: records until you tap once more |
 | **Esc** while recording | Cancels |
-| Quick single tap | Ignored |
 
-You can change the key in Settings (Right ⌘, Right ⌃, or Fn/🌐).
+The key can be changed to Right ⌘, Right ⌃ or Fn/🌐 in Settings.
 
-Things you can say:
+**More things you can say**
 
-- "Let's meet at 3, **no wait**, 4" → *Let's meet at 4*
-- "The meeting is Monday. **Scratch that.** The meeting is Wednesday." → *The meeting is Wednesday.*
-- "I want pizza and wings, **scrap that, not the wings**" → *I want pizza.*
-- "Add eggs, milk, and butter. **Wait, skip the butter.**" → *Add eggs and milk.*
-- "I'd like the soup, not the salad" → left alone: nothing was taken back
-- "…**start over.** Hi Sarah, quick question" → *Hi Sarah, quick question*
-- "We need **first** eggs, **second** milk, **third** bread" → a numbered list
-- "Hi Alex **new paragraph** thanks for…" → a paragraph break
-- "Are we still on **question mark**" → *Are we still on?*
+- "The meeting is on Monday. **Scratch that.** The meeting is on Wednesday." → *The meeting is on Wednesday.*
+- "Hey Sarah, so the thing is. **Start over.** Hi Sarah, quick question about the budget." → *Hi Sarah, quick question about the budget.*
+- "Hi Alex, **new paragraph**, thanks for the quick turnaround on this." → a paragraph break after the greeting
+- "To set it up, **first** install the CLI, **second** run the login command, and **third** deploy the project." → a numbered list
+- "I want pizza, not wings." → left alone, because nothing was taken back
 
-Text is styled for the app you're in: casual in Slack and Messages, full sentences in Mail, and in editors and terminals identifiers are kept exactly with no trailing period.
+**Snippets.** Add a trigger and its text in Settings › Snippets, for example `my LinkedIn` → `https://www.linkedin.com/in/you`. Matching ignores case, punctuation and spacing ("my linked in" works) but only matches whole words. Snippets expand after cleanup, so "send them my LinkedIn, no wait, my GitHub" pastes only the GitHub link.
 
-**Snippets.** Add a trigger and its text in Settings › Snippets, e.g. `my LinkedIn` → `https://www.linkedin.com/in/you`. Say the trigger anywhere in a dictation ("here's my LinkedIn if you want to connect") and the text is pasted exactly as written. Matching ignores case, punctuation and spacing ("my linked in" works) and only matches whole words. Expansion happens after cleanup, so "send them my LinkedIn, no wait, my GitHub" expands only GitHub. A dictation that is just the trigger ("my email signature") becomes exactly the stored text.
-
-**Meeting notes.** Choose *Start Meeting Notes* from the menu bar. Murmur records your microphone (labelled *You*) and the Mac's audio output (*Others*, via ScreenCaptureKit, which asks for Screen & System Audio Recording permission). No bot joins the call. Both are transcribed while the meeting runs, and about once a minute the local LLM folds the new talk into the notes: summary, decisions, action items with owners, and open questions. When someone changes their mind, the notes keep the final version. *Stop* writes a final version and saves notes plus the timestamped transcript as Markdown in `~/Library/Application Support/Murmur/Meetings`. Without headphones the mic also hears the call, so mic segments that repeat what just came through the speakers are dropped. Dictation is paused while a meeting is recording. Everything stays on the Mac.
+**Meeting notes.** Choose *Start Meeting Notes* from the menu bar. Quietype records your microphone (*You*) and the Mac's audio output (*Others*, through ScreenCaptureKit, which asks for Screen & System Audio Recording permission). About once a minute the local LLM folds the new conversation into the notes, and when someone changes their mind the notes keep the final version. *Stop* saves the notes and a timestamped transcript as Markdown. Without headphones the microphone also hears the call, so microphone segments that repeat what just played through the speakers are dropped. Dictation is paused while a meeting is recording.
 
 **Settings**
-- **Cleanup mode:** *Smart* (default) uses the LLM only when needed. *Always* runs it on everything. *Rules only* never uses it.
-- **Cleanup model:** Qwen3 4B (best) or Qwen3 1.7B (about twice as fast, weaker on subtle corrections).
-- **Dictionary:** one term per line. `Kubernetes` fixes spelling and casing. `cooper netties -> Kubernetes` replaces a mishearing.
-- **History:** recent dictations with the raw transcript and per-stage timings. The menu bar's *Recent* submenu copies any of them.
 
-## Measuring speed
+- **Cleanup mode:** *Smart* (default) runs the LLM only when the transcript needs it. *Always* runs it on every dictation. *Rules only* never uses the LLM for dictation (meeting notes still load it).
+- **Cleanup model:** Qwen3 4B Instruct (best quality) or Qwen3 1.7B (smaller and faster, weaker on subtle corrections).
+- **Speech model:** Parakeet Ultra (most accurate, 25 languages), Parakeet v2 (English) or Phonon-2 (English, fastest, macOS 15+). Cleanup rules and prompts are written for English.
+- **Dictionary:** one term per line. `Kubernetes` fixes spelling and casing; `cooper netties -> Kubernetes` replaces a mishearing.
+- **History:** recent dictations with the raw transcript, the cleaned text and per-stage timings. On by default; turn off *Keep history* to stop saving new dictations.
 
-```sh
-swift build -c release
-say -o /tmp/test.aiff "Let's do the call at two, no wait, three PM." && afconvert -f WAVE -d LEI16@16000 /tmp/test.aiff /tmp/test.wav
-.build/release/murmur-bench \
-  --model ~/Library/Application\ Support/Murmur/Models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf \
-  --audio /tmp/test.wav --cases evals/cases.jsonl --compare
+## How it works
+
+```mermaid
+flowchart LR
+    A["🎙️ Key down"] --> B["Record 16 kHz"]
+    B --> C["Split at pauses,<br/>transcribe while talking"]
+    C --> D["Key up:<br/>transcribe last stretch"]
+    D --> E["Rules pass"]
+    E -->|"no cues"| H
+    E -->|"correction, list,<br/>formatting cue"| F["Local LLM"]
+    F --> G{"Output guard"}
+    G -->|"accepted"| H["Dictionary, app style,<br/>snippets"]
+    G -->|"rejected: rules text<br/>+ fallback corrections"| H
+    H --> I["⌘V"]
 ```
 
-This prints transcription time, LLM prefill and generation time per case, and with `--compare`, speculative versus plain decoding. Each entry in the app's History tab shows the same breakdown for your real dictations.
+Most of the speed comes from avoiding work rather than doing it faster:
 
-## Cleanup quality
+1. **Transcribe while you talk.** The recording is split at pauses and finished stretches are transcribed in the background, so at release only the stretch since your last pause is left. That keeps the wait flat however long you speak, as long as you pause now and then and transcription keeps up: one long stretch with no pause is transcribed in full at release, and any earlier stretch still queued behind a slow transcription adds to the wait.
+2. **Skip the LLM when it isn't needed.** A deterministic rules pass removes fillers, stutters and standalone "start over". The LLM runs only when the transcript contains a cue: a correction ("scratch that", "no wait", "I mean"), a list ("first… second…", "bullet point"), a formatting command ("new paragraph", "comma") or a filler the rules can't safely remove ("you know", "like").
+3. **Cache the prompt.** The system prompt and few-shot examples are evaluated once when the model loads. Each dictation evaluates only its own text.
+4. **Speculative decoding from the input.** Cleanup output is mostly a copy of the input, so the decoder proposes upcoming tokens straight from the dictation and verifies up to 12 at once. Output is identical to plain greedy decoding (`quietype-bench --compare` checks this). It only saves time on GPUs where checking a batch of tokens costs little more than checking one, so Quietype times a batch when the model loads and switches speculation off everywhere else. It was off on the M2 Air behind the numbers below.
+5. **Guard the output.** If the LLM answers the dictation instead of cleaning it ("write me a poem" → a poem), invents content, or returns nothing for no reason, Quietype pastes the rules-pass text instead.
 
-`evals/cases.jsonl` has 35 cases covering fillers, corrections, start-over, lists, formatting commands, prompt injection ("write me a poem", "ignore all previous instructions"), per-app style and vocabulary. `evals/corrections.jsonl` has 46 self-revision cases ("x and y, scrap that, not y", replacements, additions, chained revisions, and look-alikes that must be left alone). `evals/corrections_more.jsonl` adds 25 for less common wordings ("take the X off", "strike X", "swap X for Y", "five nights, er, four", two revisions in one sentence). `evals/corrections_holdout*.jsonl` hold 60 cases written by independent agents in three batches (16, 20 and 24); the third was added unread and only scored at the end. `evals/snippets.jsonl` covers snippet expansion through the whole pipeline. `evals/run_evals.py` runs them through the app's own Swift code (`murmur-cli`) against any llama.cpp server:
+**Stage timings** from `quietype-bench`, with both models loaded before timing:
 
-```sh
-llama-server -m Qwen3-4B-Instruct-2507-Q4_K_M.gguf --jinja -c 4096 --port 8080
-swift build --product murmur-cli
-python3 evals/run_evals.py            # smart mode, as the app runs
-python3 evals/run_evals.py --all-llm  # force every case through the LLM
-python3 evals/run_evals.py --cases evals/corrections.jsonl
-python3 evals/run_meeting_notes.py    # replays evals/meetings/*.json and prints each notes update
-```
+| Dictation | Audio | Path | Transcribe at release | LLM cleanup |
+|---|---:|---|---:|---:|
+| "Thanks for sending the deck over, I will take a look…" | 5.0 s | rules only | 73 ms | – |
+| "Um, so I think we should, uh, push the launch to next week." | 3.8 s | rules only | 59 ms | – |
+| "Let's do the call at 2, no wait, 3 PM." | 2.8 s | LLM | 57 ms | 565 ms |
+| "…three things. First, a venue. Second, catering…" | 9.7 s | LLM, list | 95 ms | 1,654 ms |
 
-The *Cleanup evals* workflow runs all of this on a Linux runner (llama.cpp on the CPU) for pushes to `main`, or by hand.
+<sub>Per-stage timings, not key-release-to-paste latency. One run per clip on a MacBook Air (M2, 16 GB); [method and how to reproduce](docs/benchmarks.md#stage-timings).</sub>
 
-| Model | Smart mode | Notes |
-|---|---|---|
-| Qwen3 4B Instruct 2507 (Q4_K_M) | 34/35 | The one miss is an ambiguous "…onto Kubernetes, actually onto the new cluster" |
-| Qwen3 1.7B (Q4_K_M) | 25/35 | Weaker at formatting commands and occasionally drops content |
+The full design, module boundaries and extension points are in [docs/architecture.md](docs/architecture.md).
 
-## Project layout
+## Quality
 
-```
-Sources/MurmurCore     portable logic, tested on Linux and macOS:
-                       rules pass, cue detection, prompt, output guard, speculative
-                       decoder, hotkey state machine, pause segmenter, live transcription,
-                       snippets, meeting transcript and live notes
-Sources/MurmurKit      macOS: llama.cpp runner, Parakeet transcriber, model downloads
-Sources/Murmur         the menu bar app (AppKit + SwiftUI)
-Sources/murmur-bench   headless pipeline for latency numbers and CI
-Sources/murmur-cli     JSON front end over MurmurCore, used by the evals
-evals/                 cleanup eval cases and runner
-scripts/build-app.sh   builds and signs build/Murmur.app
-```
+Cleanup quality is measured by eval suites that run the app's own rules, prompt and guard (through `quietype-cli`) against a llama.cpp server. CI runs them on every change to the cleanup code and fails if any suite drops below its recorded baseline.
 
-```sh
-swift test --filter MurmurCoreTests     # fast, no models needed (also runs on Linux)
-MURMUR_TEST_MODEL=/path/to/model.gguf swift test --filter MurmurKitTests
-```
+| Suite | Cases | What it covers | Qwen3 4B |
+|---|---:|---|---:|
+| [Cleanup](evals/cases/cleanup.jsonl) | 35 | Fillers, corrections, "start over", lists, formatting commands, prompt injection, per-app style, vocabulary | **35/35** |
+| [Corrections](evals/cases/corrections.jsonl) | 46 | Taking things back, replacements, additions, chained revisions, and look-alikes that must be left alone | **45/46** |
+| [Corrections, extended](evals/cases/corrections-extended.jsonl) | 25 | Less common wordings ("strike X", "swap X for Y"), corrections after a filler, two revisions in one sentence | **22/25** |
+| [Holdout](evals/cases/holdout.jsonl) | 60 | Corrections never used while tuning the prompt | **52/60** |
+| [Snippets](evals/cases/snippets.jsonl) | 12 | Snippet expansion through the whole pipeline, including corrections between snippets | **12/12** |
+| [Meeting notes](evals/meetings) | 33 checks | Two replayed meetings, checked with fixture assertions: expected names, tasks and phrases appear in the right section (and abandoned proposals don't), and every live update succeeds | **33/33** |
 
-## CI
+<sub>Run 2026-10-21 on a MacBook Air (M2, 16 GB) at temperature 0. The meeting checks are substring assertions, not an accuracy score. [Setup and how to reproduce](docs/benchmarks.md#eval-scores).</sub>
 
-- **CI** (every push): core tests on Linux.
-- **Cleanup evals** (pushes to `main` that touch the core or evals, or by hand): core tests, then the cleanup, correction, snippet and meeting-notes evals against Qwen3 4B on llama.cpp's CPU server.
-- **macOS** (pushes that touch Mac code): builds and bundles `Murmur.app`. Start it by hand (*Actions › macOS › Run workflow*) to also run Parakeet and the cleanup LLM end to end on synthesized speech. That takes about 20 minutes on a runner, and macOS minutes bill at 10x on private repos, so it isn't automatic.
+The holdout suite exists to catch a prompt that has overfitted to the other suites. See [evals/README.md](evals/README.md) for the case format and how to run everything yourself.
+
+## Privacy
+
+- Audio is processed in memory and never written to disk or sent anywhere.
+- The only network traffic is downloading the speech and cleanup models.
+- Quietype stores, in `~/Library/Application Support/Quietype/`:
+  - `history.json`: your last 100 dictations (raw and cleaned text, the app you dictated into, timings), in plain JSON. Turn off *Settings › History › Keep history* and new dictations aren't saved. If it can't be read, it is kept beside it as `history.unreadable-<date>-<time>.json` and a new history is started. *Settings › History › Clear History* deletes the history and those kept copies.
+  - `Meetings/`: notes and transcripts you chose to record, as Markdown.
+  - `Models/`: the cleanup models.
+- Settings, your personal dictionary and your snippets (including their text) are stored in plain form in UserDefaults, domain `com.noahweiss.quietype`.
+- Speech models are kept in FluidAudio's cache, `~/Library/Application Support/FluidAudio/`.
+- Pasting goes through the clipboard: Quietype puts the text there, sends ⌘V, then restores what was on the clipboard before.
+
+## Limitations
+
+- **English only for cleanup.** Speech recognition can use other languages with Parakeet Ultra, but the rules and prompts are written for English.
+- **Echo suppression is a heuristic.** Without headphones, a microphone segment is dropped when it overlaps call audio in time and repeats most of its words in order. It can miss an echo the microphone picked up differently, or drop something you said over the other person that repeats their words.
+- **Everyone on the call is "Others".** Meeting transcripts tell your microphone apart from the Mac's audio output, not one remote speaker from another.
+- **Per-app styles go by app.** Styles are chosen by the frontmost app's bundle ID, so Slack or Gmail in a browser tab gets the browser's style (the default), not the chat or email one.
 
 ## Troubleshooting
 
-- **Nothing happens when I hold the key:** check Accessibility in System Settings. If you rebuilt the app, remove Murmur from the list and add it again.
-- **Fn key opens the emoji picker:** set System Settings › Keyboard › "Press 🌐 key to" to "Do Nothing", or use Right Option.
-- **Text doesn't paste in one app:** some apps block synthetic ⌘V. The text is still in History; click it in the menu to copy.
-- **Debug llama.cpp:** run the app binary with `MURMUR_LLAMA_LOG=1 build/Murmur.app/Contents/MacOS/Murmur`.
+<details>
+<summary><b>Nothing happens when I hold the key</b></summary>
+
+Check that Quietype is enabled in System Settings › Privacy & Security › Accessibility. If you rebuilt the app, remove Quietype from the list and add it again.
+</details>
+
+<details>
+<summary><b>The Fn key opens the emoji picker</b></summary>
+
+Set System Settings › Keyboard › "Press 🌐 key to" to "Do Nothing", or use Right Option.
+</details>
+
+<details>
+<summary><b>Text doesn't paste in one app</b></summary>
+
+Some apps block synthetic ⌘V. The text is still in History; click it in the menu bar's *Recent* submenu to copy it.
+</details>
+
+<details>
+<summary><b>Debugging the cleanup model</b></summary>
+
+Run the app binary directly to see llama.cpp's logs: `QUIETYPE_LLAMA_LOG=1 build/Quietype.app/Contents/MacOS/Quietype`.
+</details>
+
+## Contributing
+
+Contributions are welcome, and eval cases that show Quietype getting something wrong are especially useful. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for setup, tests and evals, and [docs/architecture.md](docs/architecture.md) for how the code fits together.
+
+```
+Sources/
+  QuietypeCore/     portable logic, tested on macOS and Linux: rules, prompt, guard,
+                    speculative decoding, segmentation, snippets, meeting notes
+  QuietypeKit/      macOS adapters: Parakeet transcriber, llama.cpp runner, model downloads
+  Quietype/         the menu bar app (AppKit + SwiftUI)
+  quietype-cli/     JSON front end over QuietypeCore, used by the evals
+  quietype-bench/   headless pipeline that prints per-stage timings
+Tests/              unit tests, mirroring Sources/
+evals/              cleanup and meeting-notes eval suites and runners
+docs/               architecture and benchmark methodology
+scripts/            app bundling and signing
+```
+
+## Acknowledgements
+
+Quietype is built on [llama.cpp](https://github.com/ggml-org/llama.cpp) (MIT) and [FluidAudio](https://github.com/FluidInference/FluidAudio) (Apache 2.0). It downloads speech models based on [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) (CC-BY-4.0) through FluidAudio and [Qwen3](https://huggingface.co/Qwen) cleanup models (Apache 2.0) as GGUF files from [Unsloth](https://huggingface.co/unsloth). Each model is subject to its own license. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) has the full notices and credits each model.
+
+## License
+
+Quietype is released under the [MIT License](LICENSE).

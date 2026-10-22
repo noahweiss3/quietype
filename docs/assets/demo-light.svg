@@ -1,0 +1,244 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 340" width="100%" role="img" aria-labelledby="title desc" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title id="title">Quietype: hold Right Option, talk, let go, and clean text is pasted</title>
+  <desc id="desc">A macOS Messages window with an empty text field and a blinking cursor. While the Right Option key is held, a dark recording pill with a red dot and a moving waveform appears, and what you say shows up word by word as a caption: "Can you add eggs, milk, and butter to the list? Wait, skip the butter." The correction "Wait, skip the butter." and the word "butter" are highlighted and struck through. When the key is released the pill shimmers briefly, disappears, and the cleaned sentence "Can you add eggs and milk to the list?" is pasted into the text field at the cursor.</desc>
+  <style>
+    /* light palette */
+    svg {
+      --backdrop: #f5f5f7;
+      --window: #ffffff;
+      --window-edge: rgba(0, 0, 0, .09);
+      --hairline: rgba(0, 0, 0, .07);
+      --text: #1d1d1f;
+      --muted: #86868b;
+      --bubble: #e9e9eb;
+      --field-edge: rgba(0, 0, 0, .13);
+      --accent: #007aff;
+      --select: rgba(0, 122, 255, .13);
+      --key: #ffffff;
+      --key-side: #d2d2d7;
+      --key-edge: rgba(0, 0, 0, .12);
+    }
+
+    .backdrop { fill: var(--backdrop) }
+    .window { fill: var(--window); stroke: var(--window-edge) }
+    .hairline { stroke: var(--hairline) }
+    .lights circle { stroke: rgba(0, 0, 0, .12); stroke-width: .5 }
+    .title { font-size: 13px; font-weight: 600; fill: var(--text) }
+    .stamp { font-size: 11px; font-weight: 500; fill: var(--muted) }
+    .bubble { fill: var(--bubble) }
+    .msg { font-size: 15px; fill: var(--text) }
+    .field { fill: var(--window); stroke: var(--field-edge) }
+    .placeholder { fill: var(--muted) }
+    .cover { fill: var(--window) }
+    .caret { fill: var(--accent) }
+    .caption text { font-size: 16px; fill: var(--muted) }
+    .mark { fill: var(--select) }
+    .strike { fill: var(--muted) }
+    .pill-body { fill: rgba(24, 24, 26, .88); stroke: rgba(255, 255, 255, .14) }
+    .rec { fill: #ff3b30 }
+    .bar { fill: rgba(255, 255, 255, .92) }
+    .dots { fill: rgba(255, 255, 255, .55) }
+    .key-side { fill: var(--key-side) }
+    .key-top { fill: var(--key); stroke: var(--key-edge) }
+    .key-glyph { font-size: 17px; font-weight: 500; fill: var(--text) }
+    .key-label { font-size: 13px; font-weight: 500; fill: var(--muted) }
+
+    /* One 9 s loop. Base styles are the final frame, which is what reduced motion shows. */
+    .key, .pill, .placeholder, .mark, .cover { opacity: 0 }
+    .caret-move { transform: translateX(263px) }
+    .struck { opacity: .42 }
+    .loop { animation-duration: 9s; animation-iteration-count: infinite }
+    .bar, .strike, .cover { transform-box: fill-box; transform-origin: 0 50% }
+    .cover { transform-origin: 100% 50% }
+    .bars { transform-box: fill-box; transform-origin: 50% 50% }
+
+    /* 1. the key goes down, the pill slides up */
+    .key { animation-name: key }
+    @keyframes key { 0%, 3.89% { opacity: 0; transform: translateY(4px) } 6.11%, 60% { opacity: 1; transform: translateY(0) } 63.33%, 100% { opacity: 0; transform: translateY(0) } }
+    .key-cap { animation-name: press }
+    @keyframes press { 0%, 6.11% { transform: translateY(0) } 6.89%, 54.44% { transform: translateY(1.5px) } 55.22%, 100% { transform: translateY(0) } }
+    .key-label { animation-name: held }
+    @keyframes held { 0%, 54.44% { opacity: 1 } 56.67%, 100% { opacity: 0 } }
+    .pill { animation-name: pill }
+    @keyframes pill { 0%, 6.89% { opacity: 0; transform: translateY(6px) } 10%, 61.67% { opacity: 1; transform: translateY(0) } 63.89%, 100% { opacity: 0; transform: translateY(0) } }
+
+    /* 2. listening: the waveform moves and the words arrive */
+    .bar { animation-timing-function: ease-in-out; animation-iteration-count: infinite; animation-direction: alternate }
+    @keyframes lv1 { 0% { transform: scaleY(.3) } 100% { transform: scaleY(1) } }
+    @keyframes lv2 { 0% { transform: scaleY(1) } 45% { transform: scaleY(.45) } 100% { transform: scaleY(.8) } }
+    @keyframes lv3 { 0% { transform: scaleY(.55) } 40% { transform: scaleY(.95) } 100% { transform: scaleY(.25) } }
+    .w1 { animation-name: w1 }
+    .w2 { animation-name: w2 }
+    .w3 { animation-name: w3 }
+    .w4 { animation-name: w4 }
+    .w5 { animation-name: w5 }
+    .w6 { animation-name: w6 }
+    .w7 { animation-name: w7 }
+    .w8 { animation-name: w8 }
+    .w9 { animation-name: w9 }
+    .w10 { animation-name: w10 }
+    .w11 { animation-name: w11 }
+    .w12 { animation-name: w12 }
+    .w13 { animation-name: w13 }
+    .w14 { animation-name: w14 }
+    .wq { animation-name: wq }
+    @keyframes w1 { 0%, 11.11% { opacity: 0; transform: translateY(3px) } 13.33%, 100% { opacity: 1; transform: translateY(0) } }
+    @keyframes w2 { 0%, 13.33% { opacity: 0; transform: translateY(3px) } 15.56%, 100% { opacity: 1; transform: translateY(0) } }
+    @keyframes w3 { 0%, 15.56% { opacity: 0; transform: translateY(3px) } 17.78%, 100% { opacity: 1; transform: translateY(0) } }
+    @keyframes w4 { 0%, 18% { opacity: 0; transform: translateY(3px) } 20.22%, 100% { opacity: 1; transform: translateY(0) } }
+    @keyframes w5 { 0%, 20.67% { opacity: 0; transform: translateY(3px) } 22.89%, 100% { opacity: 1; transform: translateY(0) } }
+    @keyframes w6 { 0%, 23.33% { opacity: 0; transform: translateY(3px) } 25.56%, 100% { opacity: 1; transform: translateY(0) } }
+    @keyframes w7 { 0%, 25.33% { opacity: 0; transform: translateY(3px) } 27.56%, 49.44% { opacity: 1; transform: translateY(0) } 53.33%, 100% { opacity: .42; transform: translateY(0) } }
+    @keyframes w8 { 0%, 27.78% { opacity: 0; transform: translateY(3px) } 30%, 100% { opacity: 1; transform: translateY(0) } }
+    @keyframes w9 { 0%, 29.56% { opacity: 0; transform: translateY(3px) } 31.78%, 100% { opacity: 1; transform: translateY(0) } }
+    @keyframes w10 { 0%, 31.56% { opacity: 0; transform: translateY(3px) } 33.78%, 100% { opacity: 1; transform: translateY(0) } }
+    @keyframes w11 { 0%, 36.67% { opacity: 0; transform: translateY(3px) } 38.89%, 49.44% { opacity: 1; transform: translateY(0) } 53.33%, 100% { opacity: .42; transform: translateY(0) } }
+    @keyframes w12 { 0%, 39.56% { opacity: 0; transform: translateY(3px) } 41.78%, 49.44% { opacity: 1; transform: translateY(0) } 53.33%, 100% { opacity: .42; transform: translateY(0) } }
+    @keyframes w13 { 0%, 41.78% { opacity: 0; transform: translateY(3px) } 44%, 49.44% { opacity: 1; transform: translateY(0) } 53.33%, 100% { opacity: .42; transform: translateY(0) } }
+    @keyframes w14 { 0%, 43.78% { opacity: 0; transform: translateY(3px) } 46%, 49.44% { opacity: 1; transform: translateY(0) } 53.33%, 100% { opacity: .42; transform: translateY(0) } }
+    @keyframes wq { 0%, 43.78% { opacity: 0; transform: translateY(3px) } 46%, 100% { opacity: 1; transform: translateY(0) } }
+
+    /* 3. the correction is understood: highlight, then strike */
+    .mark { animation-name: mark }
+    @keyframes mark { 0%, 46.67% { opacity: 0 } 48.33%, 55.56% { opacity: 1 } 59.44%, 100% { opacity: 0 } }
+    .strike-1 { animation-name: strike-1 }
+    @keyframes strike-1 { 0%, 49.11% { transform: scaleX(0) } 52.22%, 100% { transform: scaleX(1) } }
+    .strike-2 { animation-name: strike-2 }
+    @keyframes strike-2 { 0%, 50.22% { transform: scaleX(0) } 54.22%, 100% { transform: scaleX(1) } }
+
+    /* 4. key released: the pill settles, shimmers, and leaves */
+    .rec { animation-name: rec }
+    @keyframes rec { 0%, 54.44% { fill: #ff3b30 } 56.67%, 100% { fill: rgba(255, 255, 255, .45) } }
+    .bars { animation-name: bars }
+    @keyframes bars { 0%, 54.44% { transform: scaleY(1); opacity: 1 } 56.67%, 100% { transform: scaleY(.2); opacity: 0 } }
+    .dots { animation-name: dots; opacity: 0 }
+    @keyframes dots { 0%, 54.44% { opacity: 0 } 56.67%, 100% { opacity: 1 } }
+    .sheen { animation-name: sheen; opacity: 0 }
+    @keyframes sheen { 0%, 55% { opacity: 0; transform: translateX(0) } 55.01% { opacity: 1; transform: translateX(0) } 61.67% { opacity: 1; transform: translateX(208px) } 61.68%, 100% { opacity: 0; transform: translateX(208px) } }
+
+    /* 5. the clean text is pasted at the caret, held, then everything resets */
+    .placeholder { animation-name: placeholder }
+    @keyframes placeholder { 0%, 63.89% { opacity: 1 } 63.9%, 98.89% { opacity: 0 } 100% { opacity: 1 } }
+    .typed { animation-name: typed }
+    @keyframes typed { 0%, 63.89% { opacity: 0 } 63.9%, 95% { opacity: 1 } 98.89%, 100% { opacity: 0 } }
+    .cover { animation-name: cover }
+    @keyframes cover { 0%, 63.89% { opacity: 0; transform: scaleX(1) } 63.9% { opacity: 1; transform: scaleX(1); animation-timing-function: cubic-bezier(.25, .7, .3, 1) } 67.78%, 100% { opacity: 1; transform: scaleX(0) } }
+    .caret-move { animation-name: caret-move }
+    @keyframes caret-move { 0%, 63.9% { transform: translateX(0); animation-timing-function: cubic-bezier(.25, .7, .3, 1) } 67.78%, 98.89% { transform: translateX(263px) } 99.44%, 100% { transform: translateX(0) } }
+    .caret { animation: blink 1.1s step-end infinite }
+    @keyframes blink { 0% { opacity: 1 } 50% { opacity: 0 } }
+    .caption { animation-name: caption }
+    @keyframes caption { 0%, 95% { opacity: 1 } 98.89%, 100% { opacity: 0 } }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important }
+    }
+  </style>
+  <defs>
+    <filter id="lift" x="-15%" y="-20%" width="130%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000" flood-opacity=".10"/>
+    </filter>
+    <filter id="float" x="-20%" y="-40%" width="140%" height="200%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity=".22"/>
+    </filter>
+    <linearGradient id="sheen-fill">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="pill-shape"><rect x="376" y="272" width="128" height="34" rx="17"/></clipPath>
+  </defs>
+
+  <rect class="backdrop" width="880" height="340" rx="20"/>
+
+  <!-- Messages window -->
+  <rect class="window" x="160.5" y="20.5" width="559" height="189" rx="12" filter="url(#lift)"/>
+  <g class="lights">
+    <circle cx="181" cy="39" r="6" fill="#ff5f57"/>
+    <circle cx="201" cy="39" r="6" fill="#febc2e"/>
+    <circle cx="221" cy="39" r="6" fill="#28c840"/>
+  </g>
+  <text class="title" x="440" y="43.5" text-anchor="middle">Messages</text>
+  <line class="hairline" x1="161" y1="58.5" x2="719" y2="58.5"/>
+  <text class="stamp" x="440" y="82" text-anchor="middle">Today 9:41</text>
+  <rect class="bubble" x="184" y="92" width="300" height="34" rx="17"/>
+  <path class="bubble" d="M189 116c0 5-2 8.6-6.5 10.6 5.6.9 10.6-.7 13.6-3.6z"/>
+  <text class="msg" x="198" y="114.3" textLength="271.43">Making the grocery list. Need anything?</text>
+  <rect class="field" x="184.5" y="160.5" width="511" height="33" rx="16.5"/>
+  <text class="msg placeholder loop" x="202" y="182.3">iMessage</text>
+  <text class="msg typed loop" x="202" y="182.3" textLength="259.89">Can you add eggs and milk to the list?</text>
+  <rect class="cover loop" x="201" y="166" width="263" height="22"/>
+  <g class="caret-move loop"><rect class="caret" x="199.4" y="168" width="1.6" height="18.5" rx=".8"/></g>
+
+  <!-- what you said, as a live caption -->
+  <g class="caption loop">
+    <rect class="mark loop" x="403.09" y="232.5" width="51.03" height="22" rx="5"/>
+    <rect class="mark loop" x="530.58" y="232.5" width="153.96" height="22" rx="5"/>
+    <text class="w1 loop" x="191.53" y="248" textLength="35.09">&#x201C;Can</text>
+    <text class="w2 loop" x="230.81" y="248" textLength="26.23">you</text>
+    <text class="w3 loop" x="261.23" y="248" textLength="27.55">add</text>
+    <text class="w4 loop" x="292.97" y="248" textLength="40.2">eggs,</text>
+    <text class="w5 loop" x="337.36" y="248" textLength="33.8">milk,</text>
+    <text class="w6 loop" x="375.35" y="248" textLength="27.05">and</text>
+    <text class="w7 loop struck" x="406.59" y="248" textLength="44.03">butter</text>
+    <text class="w8 loop" x="454.81" y="248" textLength="14.52">to</text>
+    <text class="w9 loop" x="473.52" y="248" textLength="23.43">the</text>
+    <text class="w10 loop" x="501.14" y="248" textLength="28.75">list?</text>
+    <text class="w11 loop struck" x="534.08" y="248" textLength="36.48">Wait,</text>
+    <text class="w12 loop struck" x="574.75" y="248" textLength="29.53">skip</text>
+    <text class="w13 loop struck" x="608.47" y="248" textLength="23.43">the</text>
+    <text class="w14 loop struck" x="636.09" y="248" textLength="47.45">butter.</text>
+    <text class="wq loop" x="681.44" y="248" textLength="7.03">&#x201D;</text>
+    <rect class="strike strike-1 loop" x="405.59" y="242.65" width="46.03" height="1.5" rx=".75"/>
+    <rect class="strike strike-2 loop" x="533.08" y="242.65" width="150.46" height="1.5" rx=".75"/>
+  </g>
+
+  <!-- recording HUD -->
+  <g class="pill loop">
+    <rect class="pill-body" x="376.5" y="272.5" width="127" height="33" rx="16.5" filter="url(#float)"/>
+    <circle class="rec loop" cx="395" cy="289" r="4"/>
+    <g class="bars loop">
+      <rect class="bar" x="408" y="285" width="3" height="8" rx="1.5" style="animation-name: lv1; animation-duration: 0.62s"/>
+      <rect class="bar" x="414" y="282" width="3" height="14" rx="1.5" style="animation-name: lv2; animation-duration: 0.74s"/>
+      <rect class="bar" x="420" y="279" width="3" height="20" rx="1.5" style="animation-name: lv3; animation-duration: 0.58s"/>
+      <rect class="bar" x="426" y="283" width="3" height="12" rx="1.5" style="animation-name: lv1; animation-duration: 0.86s"/>
+      <rect class="bar" x="432" y="278" width="3" height="22" rx="1.5" style="animation-name: lv2; animation-duration: 0.66s"/>
+      <rect class="bar" x="438" y="280.5" width="3" height="17" rx="1.5" style="animation-name: lv3; animation-duration: 0.78s"/>
+      <rect class="bar" x="444" y="278" width="3" height="22" rx="1.5" style="animation-name: lv1; animation-duration: 0.54s"/>
+      <rect class="bar" x="450" y="279.5" width="3" height="19" rx="1.5" style="animation-name: lv2; animation-duration: 0.82s"/>
+      <rect class="bar" x="456" y="282.5" width="3" height="13" rx="1.5" style="animation-name: lv3; animation-duration: 0.7s"/>
+      <rect class="bar" x="462" y="278.5" width="3" height="21" rx="1.5" style="animation-name: lv1; animation-duration: 0.76s"/>
+      <rect class="bar" x="468" y="281.5" width="3" height="15" rx="1.5" style="animation-name: lv2; animation-duration: 0.6s"/>
+      <rect class="bar" x="474" y="280" width="3" height="18" rx="1.5" style="animation-name: lv3; animation-duration: 0.88s"/>
+      <rect class="bar" x="480" y="283.5" width="3" height="11" rx="1.5" style="animation-name: lv1; animation-duration: 0.68s"/>
+      <rect class="bar" x="486" y="285.5" width="3" height="7" rx="1.5" style="animation-name: lv2; animation-duration: 0.8s"/>
+    </g>
+    <g class="dots loop">
+      <circle cx="409.5" cy="289" r="1.5"/>
+      <circle cx="415.5" cy="289" r="1.5"/>
+      <circle cx="421.5" cy="289" r="1.5"/>
+      <circle cx="427.5" cy="289" r="1.5"/>
+      <circle cx="433.5" cy="289" r="1.5"/>
+      <circle cx="439.5" cy="289" r="1.5"/>
+      <circle cx="445.5" cy="289" r="1.5"/>
+      <circle cx="451.5" cy="289" r="1.5"/>
+      <circle cx="457.5" cy="289" r="1.5"/>
+      <circle cx="463.5" cy="289" r="1.5"/>
+      <circle cx="469.5" cy="289" r="1.5"/>
+      <circle cx="475.5" cy="289" r="1.5"/>
+      <circle cx="481.5" cy="289" r="1.5"/>
+      <circle cx="487.5" cy="289" r="1.5"/>
+    </g>
+    <g clip-path="url(#pill-shape)"><rect class="sheen loop" x="296" y="272" width="80" height="34" fill="url(#sheen-fill)"/></g>
+  </g>
+
+  <!-- the Right Option key -->
+  <g class="key loop">
+    <rect class="key-side" x="522" y="275.5" width="34" height="31" rx="7"/>
+    <g class="key-cap loop">
+      <rect class="key-top" x="522.5" y="273.5" width="33" height="30" rx="6.5"/>
+      <text class="key-glyph" x="539" y="295" text-anchor="middle">&#x2325;</text>
+    </g>
+    <text class="key-label loop" x="566" y="293.8">held</text>
+  </g>
+</svg>
